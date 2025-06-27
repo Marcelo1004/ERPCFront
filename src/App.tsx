@@ -38,9 +38,12 @@ import RbacPermissions from "@/pages/RbacPermissions";
 import RbacRoles from "@/pages/RbacRoles";
 
 // === Importaciones para Movimientos de Stock ===
-import Movimientos from "@/pages/MovimientosList"; // Mantengo tu nombre de importación "Movimientos"
-import MovimientosForm from "@/pages/MovimientosForm"; // Mantengo tu nombre de importación "MovimientosForm"
-import MovimientoDetalle from "@/pages/MovimientoDetalle"; // ¡NUEVO: Importa el componente de detalle!
+import Movimientos from "@/pages/MovimientosList";
+import MovimientosForm from "@/pages/MovimientosForm";
+import MovimientoDetalle from "@/pages/MovimientoDetalle";
+
+// === NUEVA IMPORTACIÓN PARA REPORTES ===
+import ReportsPage from "@/pages/ReportsPage";
 
 
 const queryClient = new QueryClient({
@@ -60,12 +63,12 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Rutas Públicas (accesibles sin autenticación) */}
+            {/* Public routes (accessible without authentication) */}
             <Route path="/login" element={<Login />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
             
-            {/* Ruta principal protegida con Layout. 
-              Todas las rutas anidadas aquí heredarán ProtectedRoute y Layout.
+            {/* Main protected route with Layout. 
+              All nested routes here will inherit ProtectedRoute and Layout.
             */}
             <Route
               path="/"
@@ -75,15 +78,15 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              {/* Ruta por defecto cuando se accede a "/" estando autenticado */}
+              {/* Default route when accessing "/" while authenticated */}
               <Route index element={<Navigate to="/dashboard" replace />} />
 
-              {/* Rutas generales de usuario */}
+              {/* General user routes */}
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="perfil" element={<Perfil />} />
               <Route path="personalizacion" element={<SettingsPanel />} />
 
-              {/* Rutas de Gestión de Usuarios y RBAC */}
+              {/* User Management and RBAC Routes */}
               <Route
                 path="admin/usuarios"
                 element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><GestionarUsuario /></ProtectedRoute>}
@@ -97,7 +100,7 @@ const App = () => (
                 element={<ProtectedRoute allowedRoles={["Super Usuario"]}><RbacPermissions /></ProtectedRoute>}
               />
 
-              {/* Rutas de Gestión de Entidades */}
+              {/* Entity Management Routes */}
               <Route
                 path="suscripciones"
                 element={<ProtectedRoute allowedRoles={["Super Usuario"]}><Suscripciones /></ProtectedRoute>}
@@ -112,7 +115,7 @@ const App = () => (
               />
               <Route
                 path="almacenes"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><Almacenes /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><Almacenes /></ProtectedRoute>}
               />
               <Route
                 path="categorias"
@@ -124,57 +127,54 @@ const App = () => (
               />
               <Route
                 path="proveedores"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><Proveedores /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><Proveedores /></ProtectedRoute>}
               />
 
-              {/* Rutas de Ventas */}
-              {/* Rutas anidadas dentro del Layout */}
+              {/* Sales Routes */}
               <Route
                 path="ventas/crear"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><VentaForm /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario","Empleado"]}><VentaForm /></ProtectedRoute>}
               />
-              {/* Más específica: Editar Venta */}
               <Route
                 path="ventas/editar/:id"
                 element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><VentaForm /></ProtectedRoute>}
               />
-              {/* Genérica: Detalles de Venta */}
               <Route
                 path="ventas/:id"
                 element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><VentaDetalle /></ProtectedRoute>}
               />
-              {/* Ruta base: Lista de Ventas */}
               <Route
                 path="ventas"
                 element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><Ventas /></ProtectedRoute>}
               />
               
-              {/* === Rutas para Movimientos de Stock === */}
-              {/* Ruta base: Lista de Movimientos */}
+              {/* Stock Movement Routes */}
               <Route
                 path="movimientos"
                 element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><Movimientos /></ProtectedRoute>}
               />
-              {/* Ruta para crear nuevo movimiento */}
               <Route
                 path="movimientos/crear"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><MovimientosForm /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><MovimientosForm /></ProtectedRoute>}
               />
-              {/* Más específica: Editar Movimiento */}
               <Route
                 path="movimientos/editar/:id"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><MovimientosForm /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><MovimientosForm /></ProtectedRoute>}
               />
-              {/* Genérica: Detalles de Movimiento (¡DEBE IR DESPUÉS DE LA RUTA DE EDICIÓN!) */}
               <Route
                 path="movimientos/:id"
-                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario", "Empleado"]}><MovimientoDetalle /></ProtectedRoute>}
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><MovimientoDetalle /></ProtectedRoute>}
               />
 
-              {/* Cierre de la ruta principal con ProtectedRoute y Layout */}
+              {/* === NEW REPORTS ROUTE === */}
+              <Route
+                path="reports"
+                element={<ProtectedRoute allowedRoles={["Administrador", "Super Usuario"]}><ReportsPage /></ProtectedRoute>}
+              />
+
             </Route>
 
-            {/* Catch-all para rutas no encontradas fuera del layout protegido o login */}
+            {/* Catch-all for not-found routes outside the protected layout or login */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

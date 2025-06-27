@@ -8,15 +8,24 @@ import { Categoria } from '@/types/categorias';
 import { Producto } from '@/types/productos';
 import { CreatePermissionPayload, UpdatePermissionPayload } from '@/types/rbac'; 
 
-import { Venta } from '@/types/ventas'; // No necesitas DetalleVenta aquí
+import { Venta } from '@/types/ventas';
 import { Permission, Role } from '@/types/rbac'; 
 import { Proveedor, ProveedorFormData, ProveedorFilters } from '@/types/proveedores'; 
-import { Movimiento, MovimientoFormData, MovimientoFilters } from '@/types/movimientos'; // No necesitas DetalleMovimientoFormData aquí
+import { Movimiento, MovimientoFormData, MovimientoFilters } from '@/types/movimientos';
 
+import { 
+    ReportFilters,
+    SalesSummaryReportData,
+    TopSellingProductReportData,
+    StockLevelReportData,
+    ClientPerformanceReportData
+} from '@/types/reports';
 
 // 1. Crea la instancia base de Axios
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -30,10 +39,10 @@ export interface FilterParams {
     page?: number;
     page_size?: number;
     search?: string;
-    empresa?: number;
+    empresa?: number | string; // Allow string "all" for frontend but handled in ReportsPage
     proveedor?: number;
     almacen_destino?: number;
-    estado?: 'Pendiente' | 'Aceptado' | 'Rechazado'; // Tipo literal para el estado
+    estado?: 'Pendiente' | 'Aceptado' | 'Rechazado' | string; // Allow string "all" for frontend
     [key: string]: any; // Permite propiedades adicionales sin declararlas explícitamente
 }
 
@@ -132,7 +141,7 @@ axiosInstance.interceptors.response.use(
             if (refreshToken) {
                 try {
                     const response = await axiosInstance.post(
-                        `${import.meta.env.VITE_API_URL}usuarios/login/refresh/`,
+                        `${API_BASE_URL}/usuarios/login/refresh/`, // Usar API_BASE_URL aquí
                         { refresh: refreshToken },
                         { timeout: 15000 } 
                     );
@@ -197,22 +206,27 @@ const normalizePaginatedResponse = <T>(data: T[] | PaginatedResponse<T>): Pagina
     };
 };
 
-// --- Función auxiliar para construir la cadena de query params ---
-const buildQueryParams = (filters?: FilterParams): string => {
-    if (!filters) return '';
+// --- Función auxiliar para construir la cadena de query params para descargas ---
+// Esta función ahora solo construye el path, los filtros serán manejados por Axios
+// cuando se haga la petición GET para el reporte.
+const buildReportDownloadPath = (basePath: string, filters: ReportFilters): string => {
     const params = new URLSearchParams();
     for (const key in filters) {
-        const value = (filters as any)[key]; 
-        if (value !== undefined && value !== null && value !== '') { 
+        // Only append if the value is not undefined, null, or an empty string, AND not 'all'
+        const value = filters[key as keyof ReportFilters];
+        if (value !== undefined && value !== null && String(value).trim() !== '' && String(value).toLowerCase() !== 'all') {
             params.append(key, String(value));
         }
     }
-    return params.toString();
+    return `${basePath}${params.toString() ? `?${params.toString()}` : ''}`;
 };
 
 
 // --- OBJETO API CON TODOS LOS MÉTODOS CONSOLIDADOS ---
 const api = {
+    // Exponer la baseURL para que el frontend pueda construir URLs completas para descargas
+    baseURL: API_BASE_URL,
+
     // --- Autenticación y Perfil de Usuario ---
     login: (credentials: LoginCredentials): Promise<AuthResponse> =>
         axiosInstance.post('/usuarios/login/', credentials).then(res => res.data),
@@ -297,7 +311,6 @@ const api = {
         axiosInstance.delete(`/categorias/${categoriaId}/`).then(() => {}),
 
     // --- Funciones para Proveedores ---
-    // ProveedorFilters extiende FilterParams, por lo que acepta los mismos parámetros
     fetchProveedores: (filters?: ProveedorFilters): Promise<PaginatedResponse<Proveedor>> =>
         axiosInstance.get('/proveedores/', { params: filters }).then(res => normalizePaginatedResponse(res.data)),
     getProveedorById: (id: number): Promise<Proveedor> =>
@@ -414,11 +427,30 @@ const api = {
         axiosInstance.patch(`/movimientos/${id}/`, movimientoData).then(res => res.data),
     deleteMovimiento: (id: number): Promise<void> => 
         axiosInstance.delete(`/movimientos/${id}/`).then(() => {}),
-    // Nuevas acciones para aceptar/rechazar movimientos (¡Ahora sí están aquí!)
     aceptarMovimiento: (id: number): Promise<any> => 
         axiosInstance.post(`/movimientos/${id}/aceptar/`).then(res => res.data),
     rechazarMovimiento: (id: number): Promise<any> => 
         axiosInstance.post(`/movimientos/${id}/rechazar/`).then(res => res.data),
+
+    // === FUNCIONES PARA REPORTES (¡NUEVAS ADICIONES!) ===
+    // IMPORTANTE: Ahora pasamos los filtros directamente al objeto `params` de Axios.
+    // Axios se encarga de ignorar `undefined` o `null` valores.
+    // Tu `ReportsPage.tsx` ya envía `undefined` para "all", lo cual es ideal.
+    getSalesSummaryReport: (filters: ReportFilters): Promise<SalesSummaryReportData> => {
+        return axiosInstance.get('/reports/sales-summary/', { params: filters }).then(res => res.data);
+    },
+    getTopSellingProductsReport: (filters: ReportFilters): Promise<TopSellingProductReportData[]> => {
+        return axiosInstance.get('/reports/top-selling-products/', { params: filters }).then(res => res.data);
+    },
+    getStockLevelReport: (filters: ReportFilters): Promise<StockLevelReportData[]> => {
+        return axiosInstance.get('/reports/stock-level/', { params: filters }).then(res => res.data);
+    },
+    getClientPerformanceReport: (filters: ReportFilters): Promise<ClientPerformanceReportData[]> => {
+        return axiosInstance.get('/reports/client-performance/', { params: filters }).then(res => res.data);
+    },
+    // Mantengo buildReportDownloadPath para los casos de descarga, ya que `window.open`
+    // no usa el interceptor de Axios ni su manejo de `params` automáticamente.
+    buildReportUrl: buildReportDownloadPath, 
 };
 
 export default api;

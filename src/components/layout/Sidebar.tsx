@@ -6,7 +6,6 @@ import {
   User,
   Grid2X2,
   LogOut,
-  Server, // Posible cambio
   Briefcase,
   MapPin,
   Warehouse,
@@ -20,12 +19,11 @@ import {
   Palette,
   ReceiptText,
   LucideProps,
-  // Nuevos iconos importados o alternativas
-  CreditCard, // Alternativa para Suscripción
-  Repeat, // Alternativa para Suscripción
-  Truck, // Propuesta para Proveedores
-  ArrowLeftRight, // Propuesta para Movimientos de Stock
-  Package2, // Otra propuesta para Movimientos de Stock
+  CreditCard,
+  Repeat,
+  Truck,
+  ArrowLeftRight,
+  FileBarChart, // <-- ¡NUEVO ÍCONO PARA REPORTES!
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { ForwardRefExoticComponent, RefAttributes } from 'react';
@@ -71,9 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Módulo de Ventas',
       items: [
         { path: '/empresas', label: 'Gestionar Empresas', icon: Briefcase, permission: 'view_empresa' },
-        { path: '/suscripciones', label: 'Gestionar Suscripción', icon: Repeat, permission: 'view_suscripcion' }, // <-- CAMBIADO: Repeat
-        
-        
+        { path: '/suscripciones', label: 'Gestionar Suscripción', icon: Repeat, permission: 'view_suscripcion' },
         { path: '/ventas', label: 'Ventas', icon: ReceiptText, permission: 'view_venta' },
       ]
     },
@@ -94,6 +90,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         { path: '/admin/usuarios', label: 'Gestionar Usuarios', icon: Users, permission: 'manage_users' },
         { path: '/admin/roles', label: 'Gestionar Roles', icon: KeyRound, permission: 'manage_roles' },
         { path: '/admin/permissions', label: 'Gestionar Permisos', icon: ShieldCheck, permission: 'manage_permissions' },
+      ]
+    },
+    { // <--- ¡NUEVA SECCIÓN DE REPORTES!
+      title: 'Módulo de Reportes',
+      items: [
+        { path: '/reports', label: 'Generar Reportes', icon: FileBarChart, permission: 'view_report' },
       ]
     }
   ];
@@ -160,6 +162,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               </div>
             )}
             {section.items.map((item) => {
+              // Permiso para Reportes: 'view_report'
               const canSeeItem = item.permission ? (user ? hasPermission(item.permission) : false) : true;
 
               if (!canSeeItem) {
