@@ -1,3 +1,5 @@
+// src/components/layout/Sidebar.tsx (Revisa y aplica los cambios)
+
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,8 +25,11 @@ import {
   Repeat,
   Truck,
   ArrowLeftRight,
-  FileBarChart, // <-- ¡NUEVO ÍCONO PARA REPORTES!
+  FileBarChart,
+  Store,
+  Zap,
 } from 'lucide-react';
+
 import { Button } from '../../components/ui/button';
 import { ForwardRefExoticComponent, RefAttributes } from 'react';
 
@@ -66,6 +71,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       ]
     },
     {
+      title: 'Módulos Públicos',
+      items: [
+        { path: '/marketplace', label: 'Marketplace de Tiendas', icon: Store, permission: undefined },
+      ]
+    },
+    {
       title: 'Módulo de Ventas',
       items: [
         { path: '/empresas', label: 'Gestionar Empresas', icon: Briefcase, permission: 'view_empresa' },
@@ -92,10 +103,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         { path: '/admin/permissions', label: 'Gestionar Permisos', icon: ShieldCheck, permission: 'manage_permissions' },
       ]
     },
-    { // <--- ¡NUEVA SECCIÓN DE REPORTES!
+    { 
       title: 'Módulo de Reportes',
       items: [
         { path: '/reports', label: 'Generar Reportes', icon: FileBarChart, permission: 'view_report' },
+        { 
+          path: '/demand-prediction', 
+          label: 'Predicción Demanda', 
+          icon: Zap,
+          permission: 'predict_demand' // Un nuevo permiso específico, o 'Administrador'/'Super Usuario' si lo manejas por rol
+        },
       ]
     }
   ];
@@ -106,7 +123,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       isCollapsed ? "w-16" : "w-64"
     )}>
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-        {!isCollapsed && (
+        {/* Aquí está la sección del encabezado del sidebar (ERP Cloud) */}
+        {!isCollapsed && ( // <-- Asegúrate de que esta condición es correcta
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
               <span className="text-white font-bold text-sm">ERP</span>
@@ -130,7 +148,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         </Button>
       </div>
 
-      {!isCollapsed && user && (
+      {/* Información del usuario logueado */}
+      {!isCollapsed && user && ( // <-- Asegúrate de que esta condición es correcta
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center shadow-sm">
@@ -153,17 +172,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         </div>
       )}
 
+      {/* Secciones de navegación */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navSections.map((section, sectionIndex) => (
           <React.Fragment key={sectionIndex}>
-            {section.title && !isCollapsed && (
+            {section.title && !isCollapsed && ( // <-- Asegúrate de que esta condición es correcta
               <div className="pt-4 pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {section.title}
               </div>
             )}
             {section.items.map((item) => {
-              // Permiso para Reportes: 'view_report'
-              const canSeeItem = item.permission ? (user ? hasPermission(item.permission) : false) : true;
+              const canSeeItem = item.permission ? 
+                                 (user && (item.permission === 'predict_demand' ? (user.role?.name === 'Administrador' || user.role?.name === 'Super Usuario') : hasPermission(item.permission))) 
+                                 : true;
 
               if (!canSeeItem) {
                 return null;
@@ -186,19 +207,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                   )}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
-                  {!isCollapsed && (
+                  {!isCollapsed && ( // <-- Asegúrate de que esta condición es correcta para el label
                     <span className="font-medium text-sm">{item.label}</span>
                   )}
                 </NavLink>
               );
             })}
-            {sectionIndex < navSections.length - 1 && !isCollapsed && (
+            {sectionIndex < navSections.length - 1 && !isCollapsed && ( // <-- Asegúrate de que esta condición es correcta
               <hr className="border-t border-gray-700 my-2" />
             )}
           </React.Fragment>
         ))}
       </nav>
 
+      {/* Botón de cerrar sesión */}
       <div className="p-4 border-t border-gray-700">
         <Button
           variant="ghost"
@@ -209,7 +231,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           )}
         >
           <LogOut className="h-5 w-5" />
-          {!isCollapsed && <span className="ml-3">Cerrar Sesión</span>}
+          {!isCollapsed && <span className="ml-3">Cerrar Sesión</span>} {/* <-- Asegúrate de que esta condición es correcta */}
         </Button>
       </div>
     </div>

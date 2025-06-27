@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2, PlusCircle, Edit, Trash2, Search, Package, Tag, Warehouse, Image as ImageIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Umbral para stock bajo
 const LOW_STOCK_THRESHOLD = 10;
@@ -32,14 +33,15 @@ const LOW_STOCK_THRESHOLD = 10;
 const initialFormData = {
   nombre: '',
   descripcion: '',
-  precio: '0.00', 
+  precio: '', // Mantener como string vacío para input
   stock: 0,
   imagen: null,
   imagen_file: null,
-  descuento: '0.00', 
+  descuento: '', // Mantener como string vacío para input
   categoria: undefined,
   almacen: undefined,
   empresa: undefined,
+  is_active: true, // Por defecto, los productos nuevos son activos.
 };
 
 // Función de debounce
@@ -220,9 +222,9 @@ const Productos = () => {
       const isCorrectSucursal = almacenSucursalId === selectedSucursalInForm;
       const isCorrectEmpresa = almacenEmpresaId === targetEmpresaId;
 
-      console.log(`   - Checking almacen ID: ${almacen.id} (${almacen.nombre})`);
-      console.log(`     - Almacen Sucursal ID: ${almacenSucursalId} (Type: ${typeof almacenSucursalId}) === Selected Sucursal ID: ${selectedSucursalInForm} (Type: ${typeof selectedSucursalInForm}) -> Match: ${isCorrectSucursal}`);
-      console.log(`     - Almacen Empresa ID: ${almacenEmpresaId} (Type: ${typeof almacenEmpresaId}) === Target Empresa ID: ${targetEmpresaId} (Type: ${typeof targetEmpresaId}) -> Match: ${isCorrectEmpresa}`);
+      console.log(`    - Checking almacen ID: ${almacen.id} (${almacen.nombre})`);
+      console.log(`      - Almacen Sucursal ID: ${almacenSucursalId} (Type: ${typeof almacenSucursalId}) === Selected Sucursal ID: ${selectedSucursalInForm} (Type: ${typeof selectedSucursalInForm}) -> Match: ${isCorrectSucursal}`);
+      console.log(`      - Almacen Empresa ID: ${almacenEmpresaId} (Type: ${typeof almacenEmpresaId}) === Target Empresa ID: ${targetEmpresaId} (Type: ${typeof targetEmpresaId}) -> Match: ${isCorrectEmpresa}`);
 
 
       return isCorrectSucursal && isCorrectEmpresa;
@@ -288,21 +290,29 @@ const Productos = () => {
       setProductSearchInputValue(value);
       debouncedSetProductSearchTerm(value);
     } else {
-      let parsedValue: string | number | null = value;
-
-      if (name === 'stock' || name === 'stock_minimo') {
-          parsedValue = parseFloat(value) || 0;
+      // Para precio y descuento, simplemente almacenamos el valor del input como string.
+      // Las conversiones numéricas y el toFixed() se harán solo al cargar/enviar.
+      if (name === 'stock') {
+          setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
       } else {
-          parsedValue = value;
+          setFormData(prev => ({ ...prev, [name]: value }));
       }
       
-      setFormData(prev => ({ ...prev, [name]: parsedValue }));
       setFormErrors(prev => {
         const newErrors = { ...prev };
         if (newErrors[name]) delete newErrors[name];
         return newErrors;
       });
     }
+  };
+
+  const handleCheckboxChange = (checked: boolean) => {
+    setFormData(prev => ({ ...prev, is_active: checked }));
+    setFormErrors(prev => {
+      const newErrors = { ...prev };
+      if (newErrors.is_active) delete newErrors.is_active;
+      return newErrors;
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,14 +363,17 @@ const Productos = () => {
         id: producto.id,
         nombre: producto.nombre || '',
         descripcion: producto.descripcion || '',
-        precio: producto.precio || '0.00',
+        // Precio: Se carga como string. toFixed(2) solo para que se vea con 2 decimales si el backend no lo envía así
+        precio: producto.precio !== undefined ? parseFloat(producto.precio).toFixed(2) : '0.00', 
         stock: producto.stock,
         imagen: producto.imagen || null,
         imagen_file: null,
-        descuento: producto.descuento || '0.00',
+        // Descuento: Se convierte de decimal (0.1) a porcentaje (10.00) para el input
+        descuento: producto.descuento !== undefined && producto.descuento !== null ? (parseFloat(producto.descuento) * 100).toFixed(2) : '0.00', 
         categoria: producto.categoria || undefined,
         almacen: producto.almacen || undefined,
         empresa: currentUser?.is_superuser ? producto.empresa : currentUser?.empresa,
+        is_active: producto.is_active !== undefined ? producto.is_active : true, 
       });
       if (producto.almacen_detail?.sucursal_detail?.id) {
         setSelectedSucursalInForm(producto.almacen_detail.sucursal_detail.id);
@@ -372,6 +385,7 @@ const Productos = () => {
       setFormData({
         ...initialFormData,
         empresa: currentUser?.is_superuser ? undefined : currentUser?.empresa,
+        is_active: true, // Siempre true por defecto al crear
       });
       setSelectedSucursalInForm(undefined);
     }
@@ -393,11 +407,11 @@ const Productos = () => {
     const errors: Record<string, string> = {};
     if (!formData.nombre) errors.nombre = "El nombre es requerido.";
     
+    // Convertir a número para validación
     const precioNum = parseFloat(formData.precio || '0');
     if (isNaN(precioNum) || precioNum <= 0) errors.precio = "El precio debe ser un número positivo.";
     
-    // El descuento se maneja en porcentaje (0-100) en el frontend y se convierte a decimal (0-1) para el backend
-    const descuentoNum = parseFloat(formData.descuento || '0');
+    const descuentoNum = parseFloat(formData.descuento || '0'); // Ya es un porcentaje (0-100) en formData
     if (isNaN(descuentoNum) || descuentoNum < 0 || descuentoNum > 100) errors.descuento = "El descuento debe ser un número entre 0 y 100.";
     
     if (formData.stock === undefined || formData.stock < 0) errors.stock = "El stock es requerido y debe ser no negativo.";
@@ -434,15 +448,15 @@ const Productos = () => {
     const dataToSubmit: Partial<Producto & { imagen_file?: File | null }> = {
       nombre: formData.nombre,
       descripcion: formData.descripcion || null,
-      precio: formData.precio, // Se mantiene como string para Django DecimalField
+      precio: precioNum.toFixed(2), // Convertir a string con 2 decimales para el backend
       stock: formData.stock,
-      // Convertir el porcentaje de descuento (ej. 10.50%) a un decimal (0.105) para el backend
-      descuento: (descuentoNum / 100).toFixed(4), // Usar 4 decimales para mayor precisión
+      descuento: (descuentoNum / 100).toFixed(4), // Convertir a decimal (0-1) para el backend
       categoria: formData.categoria,
       almacen: formData.almacen,
       empresa: currentUser?.is_superuser && formData.empresa !== undefined
         ? formData.empresa
         : currentUser?.empresa as number,
+      is_active: formData.is_active, 
     };
 
     if (formData.imagen_file) {
@@ -572,6 +586,7 @@ const Productos = () => {
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</TableHead>
+                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activo</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Almacén</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sucursal</TableHead>
@@ -584,20 +599,20 @@ const Productos = () => {
               <TableBody className="bg-white divide-y divide-gray-100">
                 {isFetchingProductos && productos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={currentUser?.is_superuser ? 11 : 10} className="h-24 text-center text-gray-500">
+                    <TableCell colSpan={currentUser?.is_superuser ? 12 : 11} className="h-24 text-center text-gray-500">
                       <Loader2 className="h-5 w-5 animate-spin inline-block mr-2" /> Cargando resultados...
                     </TableCell>
                   </TableRow>
                 ) : filteredProductos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={currentUser?.is_superuser ? 11 : 10} className="h-24 text-center text-gray-500">
+                    <TableCell colSpan={currentUser?.is_superuser ? 12 : 11} className="h-24 text-center text-gray-500">
                       No se encontraron productos con los filtros aplicados.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredProductos.map((producto) => {
                     const originalPrice = Number(producto.precio);
-                    const discountRate = Number(producto.descuento); // Esto ya viene en formato decimal (ej. 0.10)
+                    const discountRate = Number(producto.descuento); 
                     const hasDiscount = discountRate > 0;
                     const finalPrice = originalPrice * (1 - discountRate);
 
@@ -629,10 +644,12 @@ const Productos = () => {
                             `$${originalPrice.toFixed(2)}`
                           )}
                         </TableCell>
-                        {/* Mostrar descuento como porcentaje */}
                         <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{`${(discountRate * 100).toFixed(2)}%`}</TableCell>
                         <TableCell className={`px-4 py-4 whitespace-nowrap text-sm ${producto.stock <= LOW_STOCK_THRESHOLD ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
                           {producto.stock}
+                        </TableCell>
+                        <TableCell className="px-4 py-4 whitespace-nowrap text-sm">
+                          <Checkbox checked={producto.is_active} disabled />
                         </TableCell>
                         <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{producto.categoria_detail?.nombre || 'N/A'}</TableCell>
                         <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{producto.almacen_detail?.nombre || 'N/A'}</TableCell>
@@ -671,7 +688,7 @@ const Productos = () => {
 
       {/* Formulario de Creación/Edición de Producto */}
       <Dialog open={isFormOpen} onOpenChange={closeForm}>
-        <DialogContent className="sm:max-w-lg p-6 rounded-lg shadow-2xl border border-indigo-200">
+        <DialogContent className="sm:max-w-2xl p-6 rounded-lg shadow-2xl border border-indigo-200">
           <DialogHeader>
             <DialogTitle className="text-2xl font-semibold text-gray-800">
               {editingProducto ? 'Editar Producto' : 'Crear Nuevo Producto'}
@@ -680,89 +697,124 @@ const Productos = () => {
               {editingProducto ? 'Modifica los datos del producto.' : 'Introduce los datos para registrar un nuevo producto.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="nombre" className="text-right text-gray-700">Nombre</Label>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 py-4">
+            {currentUser?.is_superuser && (
+              <div className="grid gap-2">
+                <Label htmlFor="empresa" className="text-gray-700">Empresa</Label>
+                <Select
+                  name="empresa"
+                  value={formData.empresa?.toString() || "empty-selection-option"}
+                  onValueChange={(value) => handleSelectChange('empresa', value)}
+                  disabled={isLoadingEmpresas || createProductoMutation.isPending || updateProductoMutation.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isLoadingEmpresas ? (
+                      <SelectItem value="loading" disabled>Cargando empresas...</SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem value="empty-selection-option">-- Selecciona una Empresa --</SelectItem>
+                        {empresas.map(emp => (
+                          <SelectItem key={emp.id} value={emp.id.toString()}>{emp.nombre}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                {formErrors.empresa && <p className="text-red-500 text-sm mt-1">{formErrors.empresa}</p>}
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="nombre" className="text-gray-700">Nombre</Label>
               <Input
                 id="nombre"
                 name="nombre"
                 value={formData.nombre || ''}
                 onChange={handleInputChange}
-                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 required
               />
-              {formErrors.nombre && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.nombre}</p>}
+              {formErrors.nombre && <p className="text-red-500 text-sm mt-1">{formErrors.nombre}</p>}
             </div>
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="descripcion" className="text-right text-gray-700 pt-2">Descripción</Label>
+
+            <div className="grid gap-2 md:col-span-2">
+              <Label htmlFor="descripcion" className="text-gray-700">Descripción</Label>
               <Textarea
                 id="descripcion"
                 name="descripcion"
                 value={formData.descripcion || ''}
                 onChange={handleInputChange}
-                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 min-h-[80px]"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 min-h-[80px]"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 rows={3}
               />
-              {formErrors.descripcion && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.descripcion}</p>}
+              {formErrors.descripcion && <p className="text-red-500 text-sm mt-1">{formErrors.descripcion}</p>}
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="precio" className="text-right text-gray-700">Precio</Label>
+
+            <div className="grid gap-2">
+              <Label htmlFor="precio" className="text-gray-700">Precio</Label>
               <Input
                 id="precio"
                 name="precio"
                 type="number"
                 step="0.01"
-                value={formData.precio || ''}
+                value={formData.precio} // <-- SIN toFixed() aquí
                 onChange={handleInputChange}
-                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 required
                 placeholder="Ej: 12.99"
               />
-              {formErrors.precio && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.precio}</p>}
+              {formErrors.precio && <p className="text-red-500 text-sm mt-1">{formErrors.precio}</p>}
             </div>
 
-            {/* Campo de Descuento en el formulario */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="descuento" className="text-right text-gray-700">Descuento (%)</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="descuento" className="text-gray-700">Descuento (%)</Label>
               <Input
                 id="descuento"
                 name="descuento"
                 type="number"
                 step="0.01"
-                value={formData.descuento ?? ''}
+                value={formData.descuento} // <-- SIN toFixed() aquí
                 onChange={handleInputChange}
-                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 required
                 min="0"
                 max="100"
                 placeholder="Ej: 10.50"
               />
-              {formErrors.descuento && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.descuento}</p>}
+              {formErrors.descuento && <p className="text-red-500 text-sm mt-1">{formErrors.descuento}</p>}
             </div>
 
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="stock" className="text-right text-gray-700">Stock</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="stock" className="text-gray-700">Stock</Label>
               <Input
                 id="stock"
                 name="stock"
                 type="number"
                 value={formData.stock ?? ''}
                 onChange={handleInputChange}
-                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 required
               />
-              {formErrors.stock && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.stock}</p>}
+              {formErrors.stock && <p className="text-red-500 text-sm mt-1">{formErrors.stock}</p>}
             </div>
 
-            {/* Selector de Categoría */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="categoria" className="text-right text-gray-700">Categoría</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="categoria" className="text-gray-700">Categoría</Label>
               <Select
+                name="categoria"
                 value={formData.categoria?.toString() || 'empty-selection-option'}
                 onValueChange={(value) => handleSelectChange('categoria', value)}
-                disabled={isLoadingCategorias}
+                disabled={isLoadingCategorias || createProductoMutation.isPending || updateProductoMutation.isPending}
               >
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger>
                   <SelectValue placeholder="Selecciona una categoría" />
                 </SelectTrigger>
                 <SelectContent>
@@ -778,47 +830,18 @@ const Productos = () => {
                   )}
                 </SelectContent>
               </Select>
-              {formErrors.categoria && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.categoria}</p>}
+              {formErrors.categoria && <p className="text-red-500 text-sm mt-1">{formErrors.categoria}</p>}
             </div>
 
-            {/* Selector de Empresa (visible solo para Super Usuarios) */}
-            {currentUser?.is_superuser && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="empresa" className="text-right text-gray-700">Empresa</Label>
-                <Select
-                  value={formData.empresa?.toString() || 'empty-selection-option'}
-                  onValueChange={(value) => handleSelectChange('empresa', value)}
-                  disabled={isLoadingEmpresas}
-                >
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Selecciona una empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isLoadingEmpresas ? (
-                      <SelectItem value="loading-empresas" disabled>Cargando empresas...</SelectItem>
-                    ) : (
-                      <>
-                        <SelectItem value="empty-selection-option">-- Selecciona --</SelectItem>
-                        {empresas.map(e => (
-                          <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-                {formErrors.empresa && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.empresa}</p>}
-              </div>
-            )}
-
-            {/* Selector de Sucursal para el formulario */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="sucursal" className="text-right text-gray-700">Sucursal</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="sucursal" className="text-gray-700">Sucursal</Label>
               <Select
+                name="sucursal"
                 value={selectedSucursalInForm?.toString() || 'empty-selection-option'}
                 onValueChange={(value) => handleSelectChange('sucursal', value)}
-                disabled={isLoadingSucursales || (currentUser?.is_superuser && (formData.empresa === undefined || formData.empresa === null))}
+                disabled={isLoadingSucursales || createProductoMutation.isPending || updateProductoMutation.isPending || (currentUser?.is_superuser && (formData.empresa === undefined || formData.empresa === null))}
               >
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger>
                   <SelectValue placeholder="Selecciona una sucursal" />
                 </SelectTrigger>
                 <SelectContent>
@@ -834,59 +857,100 @@ const Productos = () => {
                   )}
                 </SelectContent>
               </Select>
-              {formErrors.sucursal && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.sucursal}</p>}
-              {formErrors.almacen && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.almacen}</p>}
+              {formErrors.sucursal && <p className="text-red-500 text-sm mt-1">{formErrors.sucursal}</p>}
             </div>
 
-            {/* Campo de Imagen */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="imagen_file" className="text-right text-gray-700">Imagen</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="almacen" className="text-gray-700">Almacén</Label>
+              <Select
+                name="almacen"
+                value={formData.almacen?.toString() || "empty-selection-option"}
+                onValueChange={(value) => handleSelectChange('almacen', value)}
+                disabled={isLoadingAlmacenes || createProductoMutation.isPending || updateProductoMutation.isPending || (selectedSucursalInForm === undefined || selectedSucursalInForm === null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un almacén" />
+                </SelectTrigger>
+                <SelectContent>
+                  {isLoadingAlmacenes ? (
+                    <SelectItem value="loading" disabled>Cargando almacenes...</SelectItem>
+                  ) : (
+                    <>
+                      <SelectItem value="empty-selection-option">-- Selecciona un Almacén --</SelectItem>
+                      {almacenes.filter(almacen => almacen.sucursal_detail?.id === selectedSucursalInForm).map(alm => (
+                        <SelectItem key={alm.id} value={alm.id.toString()}>{alm.nombre}</SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              {formErrors.almacen && <p className="text-red-500 text-sm mt-1">{formErrors.almacen}</p>}
+            </div>
+
+            <div className="grid gap-2 md:col-span-2">
+              <Label htmlFor="imagen_file" className="text-gray-700">Imagen</Label>
               <Input
                 id="imagen_file"
                 name="imagen_file"
                 type="file"
                 onChange={handleFileChange}
-                className="col-span-3"
+                className="rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                 accept="image/*"
               />
-              {formErrors.imagen && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.imagen}</p>}
+              {formErrors.imagen && <p className="text-red-500 text-sm mt-1">{formErrors.imagen}</p>}
               {formData.imagen && !formData.imagen_file && (
-                <div className="col-span-4 flex justify-end">
+                <div className="flex items-center gap-2 mt-2">
                   <img
                     src={formData.imagen as string}
                     alt="Imagen actual"
-                    className="mt-2 h-20 w-20 object-contain rounded-md border border-gray-200"
+                    className="h-20 w-20 object-contain rounded-md border border-gray-200"
                     onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/48x48/e2e8f0/64748b?text=No+Img`; }}
                   />
-                </div>
-              )}
-              {editingProducto && formData.imagen_file === null && (
-                <div className="col-span-4 flex justify-end">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setFormData(prev => ({ ...prev, imagen: null }))}
+                    onClick={() => setFormData(prev => ({ ...prev, imagen: null, imagen_file: null }))}
                     className="text-red-500 hover:text-red-700"
+                    disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
                   >
                     Eliminar Imagen Actual
                   </Button>
                 </div>
               )}
             </div>
+            
+            {/* Campo: Mostrar en Market (Checkbox) */}
+            <div className="grid gap-2 md:col-span-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_active"
+                  name="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={handleCheckboxChange}
+                  disabled={createProductoMutation.isPending || updateProductoMutation.isPending}
+                />
+                <Label htmlFor="is_active" className="text-gray-700 font-normal cursor-pointer">
+                  Mostrar en Market (Visible en el Marketplace de Tiendas)
+                </Label>
+              </div>
+              {formErrors.is_active && <p className="text-red-500 text-sm mt-1">{formErrors.is_active}</p>}
+            </div>
 
-            {formErrors.general && <p className="col-span-4 text-red-500 text-sm text-center">{formErrors.general}</p>}
+            {formErrors.general && <p className="md:col-span-2 text-red-500 text-sm text-center">{formErrors.general}</p>}
 
-            <DialogFooter className="pt-4">
+            <DialogFooter className="md:col-span-2 flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={closeForm} disabled={createProductoMutation.isPending || updateProductoMutation.isPending} className="rounded-md px-4 py-2">
                 Cancelar
               </Button>
               <Button type="submit" disabled={createProductoMutation.isPending || updateProductoMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-4 py-2 shadow-md">
                 {createProductoMutation.isPending || updateProductoMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  editingProducto ? 'Guardar Cambios' : 'Crear Producto'
-                )}
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : editingProducto ? 'Guardar Cambios' : 'Crear Producto'}
               </Button>
             </DialogFooter>
           </form>

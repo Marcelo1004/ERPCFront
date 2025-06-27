@@ -25,12 +25,12 @@ const Layout = () => {
     // Contenedor principal:
     // - 'flex' para colocar el sidebar y el contenido en fila.
     // - 'h-screen' para que ocupe el 100% de la altura de la ventana.
-    // - 'overflow-hidden' para que ninguna de sus secciones hijas cree un scroll general de la página.
-    <div className="flex h-screen overflow-hidden bg-background text-foreground font-body">
+    // Se eliminó 'overflow-hidden' aquí para permitir el scroll en el main content.
+    <div className="flex h-screen bg-background text-foreground font-body">
       {/* Sidebar fijo para desktop */}
       {/* - 'flex-shrink-0' previene que el sidebar se encoja.
-        - 'fixed inset-y-0' lo fija a los lados de la ventana.
-        - 'z-40' lo asegura por encima de otros elementos si hay superposiciones.
+          - 'fixed inset-y-0' lo fija a los lados de la ventana.
+          - 'z-40' lo asegura por encima de otros elementos si hay superposiciones.
       */}
       <aside className={`hidden md:flex flex-col flex-shrink-0 fixed inset-y-0 border-r border-border bg-sidebar-background text-sidebar-foreground transition-all duration-300 z-40
         ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}
@@ -40,9 +40,9 @@ const Layout = () => {
 
       {/* Contenido principal, que abarca el resto de la pantalla */}
       {/* - 'flex-1' para que ocupe todo el ancho restante después del sidebar.
-        - 'flex-col' para que el header y el main se apilen verticalmente.
-        - 'overflow-hidden' para contener sus propios hijos.
-        - Margen izquierdo dinámico para hacer espacio al sidebar.
+          - 'flex-col' para que el header y el main se apilen verticalmente.
+          - 'overflow-hidden' para contener sus propios hijos.
+          - Margen izquierdo dinámico para hacer espacio al sidebar.
       */}
       <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300
         ${isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}
@@ -53,8 +53,12 @@ const Layout = () => {
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button size="icon" variant="outline" className="sm:hidden bg-input border-input">
-                <PanelLeft className="h-5 w-5" />
-                <span className="sr-only">Toggle Menu</span>
+                {/* INICIO DEL CAMBIO: Envolvemos los hijos del botón en un Fragment */}
+                <>
+                  <PanelLeft className="h-5 w-5" />
+                  <span className="sr-only">Toggle Menu</span>
+                </>
+                {/* FIN DEL CAMBIO */}
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-sidebar-background text-sidebar-foreground border-border">
@@ -71,9 +75,9 @@ const Layout = () => {
 
         {/* Contenido principal de la aplicación: ¡Esta es la clave para el scroll! */}
         {/* - 'flex-1' para que ocupe TODO el espacio vertical restante después del header.
-          - 'overflow-y-auto' para gestionar su propio scroll vertical. 
-            ¡Si el contenido dentro del Outlet es más largo, solo esta área se desplazará!
-          - 'p-4 sm:px-6 md:gap-8': Mantén tu padding aquí.
+            - 'overflow-y-auto' para gestionar su propio scroll vertical. 
+              ¡Si el contenido dentro del Outlet es más largo, solo esta área se desplazará!
+            - 'p-4 sm:px-6 md:gap-8': Mantén tu padding aquí.
         */}
         <main className="flex-1 overflow-y-auto p-4 sm:px-6 md:gap-8"> 
           <Outlet />

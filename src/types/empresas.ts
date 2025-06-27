@@ -24,6 +24,7 @@ export interface Empresa {
   logo?: string | null; // La URL de la imagen si ya está subida
   fecha_registro: string; // La fecha se maneja como string desde Django
   is_active: boolean;
+   descripcion_corta?: string;
 
   suscripcion?: number | null; // ID de la Suscripcion (para enviar en peticiones)
   suscripcion_detail?: Suscripcion | null; // Detalles de la Suscripcion (para recibir en respuestas)

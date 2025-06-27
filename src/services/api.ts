@@ -7,6 +7,7 @@ import { Almacen } from '@/types/almacenes';
 import { Categoria } from '@/types/categorias';
 import { Producto } from '@/types/productos';
 import { CreatePermissionPayload, UpdatePermissionPayload } from '@/types/rbac'; 
+import { Pago } from '@/types/pagos';
 
 import { Venta } from '@/types/ventas';
 import { Permission, Role } from '@/types/rbac'; 
@@ -45,6 +46,46 @@ export interface FilterParams {
     estado?: 'Pendiente' | 'Aceptado' | 'Rechazado' | string; // Allow string "all" for frontend
     [key: string]: any; // Permite propiedades adicionales sin declararlas explícitamente
 }
+
+
+
+interface EmpresaMarketplace {
+  id: number;
+  nombre: string;
+  descripcion_corta?: string;
+  direccion?: string;
+}
+
+interface ProductoList {
+  id: number;
+  nombre: string;
+  precio: string; // Use string for DecimalField to avoid precision issues
+  stock: number;
+}
+
+interface ProductoDetail {
+  id: number;
+  empresa: number; // ID de la empresa
+  empresa_nombre: string;
+  categoria?: number; // ID de la categoría
+  nombre: string;
+  descripcion?: string;
+  precio: string;
+  stock: number;
+  is_active: boolean;
+}
+
+interface DemandaPredictivaResponse {
+  producto_id: number;
+  producto_nombre: string;
+  prediccion_demanda_proximos_dias: number;
+  confianza_prediccion: number; // Percentage, e.g., 85.50
+  fecha_prediccion: string;
+  explicacion_simplificada: string;
+  beneficio_erp: string;
+}
+
+
 
 // Interfaz para respuestas paginadas estándar
 export interface PaginatedResponse<T> {
@@ -451,6 +492,72 @@ const api = {
     // Mantengo buildReportDownloadPath para los casos de descarga, ya que `window.open`
     // no usa el interceptor de Axios ni su manejo de `params` automáticamente.
     buildReportUrl: buildReportDownloadPath, 
-};
 
+
+// === FUNCIONES PARA EL LADO COMERCIAL (MARKETPLACE Y TIENDAS) ===
+
+  /**
+   * Fetches a list of active companies for the public marketplace.
+   * GET /api/marketplace/empresas/
+   * @returns Promise<EmpresaMarketplace[]> - A list of marketplace-ready company data.
+   */
+  // --- ¡MODIFICACIÓN CLAVE AQUÍ: Asegurar el tipo de retorno! ---
+  getMarketplaceEmpresas: async (): Promise<EmpresaMarketplace[]> => {
+    const response = await axiosInstance.get('/marketplace/empresas/');
+    // Aquí podemos hacer una aserción de tipo si confiamos en el backend
+    return response.data as EmpresaMarketplace[]; 
+  },
+
+  /**
+   * Fetches detailed information for a specific company in the public marketplace.
+   * GET /api/marketplace/empresas/{id}/
+   * @param id The ID of the company.
+   * @returns Promise<EmpresaMarketplace> - Detailed company data for the marketplace.
+   */
+  getMarketplaceEmpresaDetail: async (id: number): Promise<EmpresaMarketplace> => {
+    const response = await axiosInstance.get(`/marketplace/empresas/${id}/`);
+    return response.data as EmpresaMarketplace;
+  },
+
+  /**
+   * Fetches a list of products for a specific company's public store.
+   * GET /api/marketplace/empresas/{empresa_id}/productos/
+   * @param empresaId The ID of the company whose products to fetch.
+   * @returns Promise<Producto[]> - A list of products.
+   */
+  getPublicProductosByEmpresa: async (empresaId: number): Promise<Producto[]> => {
+    const response = await axiosInstance.get(`/marketplace/empresas/${empresaId}/productos/`);
+    return response.data as Producto[];
+  },
+
+  /**
+   * Fetches detailed information for a specific product from the public store.
+   * GET /api/public-products/{id}/
+   * @param productId The ID of the product.
+   * @returns Promise<Producto> - Detailed product information.
+   */
+  getPublicProductoDetail: async (productId: number): Promise<Producto> => {
+    const response = await axiosInstance.get(`/public-products/${productId}/`);
+    return response.data as Producto;
+  },
+
+  /**
+   * Fetches a simulated demand prediction for a specific product.
+   * GET /api/public-products/{id}/demanda-predictiva/
+   * @param productId The ID of the product for which to predict demand.
+   * @returns Promise<DemandaPredictivaResponse> - The prediction results and explanation.
+   */
+  getDemandaPredictiva: async (productId: number): Promise<DemandaPredictivaResponse> => {
+    const response = await axiosInstance.get(`/public-products/${productId}/demanda-predictiva/`);
+    return response.data as DemandaPredictivaResponse;
+  },
+  // === FUNCIONES PARA PAGOS (¡NUEVA ADICIÓN!) ===
+    createPago: (pagoData: Omit<Pago, 'id' | 'fecha_pago' | 'fecha_creacion' | 'cliente_nombre' | 'empresa_nombre' | 'venta_id'>): Promise<Pago> =>
+        axiosInstance.post('/pagos/', pagoData).then(res => res.data),
+    fetchPagos: (params?: FilterParams): Promise<PaginatedResponse<Pago>> => // Para listar pagos
+        axiosInstance.get('/pagos/', { params }).then(res => normalizePaginatedResponse(res.data)),
+    getPagoById: (id: number): Promise<Pago> => // Para ver detalle de pago
+        axiosInstance.get(`/pagos/${id}/`).then(res => res.data),
+
+};
 export default api;

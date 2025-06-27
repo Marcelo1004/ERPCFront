@@ -1,6 +1,5 @@
-// src/types/productos.ts
-import { Categoria } from './categorias'; // Asegúrate de que esta importación exista si categoria_detail está aquí
-import { Almacen } from './almacenes';   // Asegúrate de que esta importación exista si almacen_detail está aquí
+import { Categoria } from './categorias'; 
+import { Almacen } from './almacenes';   
 
 export interface Producto {
   id: number;
@@ -10,6 +9,7 @@ export interface Producto {
   stock: number;
   imagen?: string | File | null; // Puede ser una URL de imagen (string) o un objeto File para subida
   descuento: string;
+  is_active: boolean; 
 
   categoria?: number | null; // ID de la categoría
   categoria_detail?: { // Detalles de la categoría para lectura
