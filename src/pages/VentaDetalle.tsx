@@ -47,7 +47,7 @@ const VentaDetalle: React.FC = () => {
 
 
   // Determinar si el usuario actual tiene permisos para editar la venta
-  const canEdit = user?.is_superuser || user?.role === 'ADMINISTRATIVO';
+  const canEdit = user?.is_superuser || user?.role?.name === 'Administrador';
 
 
   // Manejar estados de carga y error

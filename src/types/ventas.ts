@@ -6,8 +6,10 @@ export interface DetalleVenta {
   producto: number; // ID del producto (ForeignKey)
   producto_nombre?: string; // <--- ¡AÑADE ESTA LÍNEA! Nombre del producto (para mostrar en el frontend, opcional)
   cantidad: number;
-  precio_unitario: number; // Tu backend espera un número (DecimalField en DRF)
   venta?: number; // ID de la venta a la que pertenece (opcional al enviar en VentaSerializer anidado)
+  precio_unitario: string; // Ahora es string para coincidir con DecimalField de Django
+  descuento_aplicado: string; // ¡NUEVO CAMPO! Ahora es string para coincidir con DecimalField de Django
+  
 }
 
 // Interfaz para la Venta

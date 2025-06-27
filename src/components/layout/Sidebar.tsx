@@ -2,107 +2,101 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../lib/utils';
-import { 
-  User, 
-  Calendar, 
-  Grid2X2, 
-  ClipboardCheck,
-  ClipboardPlus,
-  ListCheck,
+import {
+  User,
+  Grid2X2,
   LogOut,
-  BrainCircuit,
-  GraduationCap,
-  BookOpen,
-  BarChart, 
-  BookOpenCheck, 
-  Server, 
-  Briefcase, 
-  MapPin, 
-  Warehouse, 
-  Tag, 
-  Package, 
-  Users, 
-  Menu, 
-  ChevronLeft, 
+  Server, // Posible cambio
+  Briefcase,
+  MapPin,
+  Warehouse,
+  Tag,
+  Package,
+  Users,
+  KeyRound,
+  ShieldCheck,
+  ChevronLeft,
   ChevronRight,
   Palette,
-  ReceiptText // <--- NUEVA IMPORTACIÓN: Icono para Ventas
+  ReceiptText,
+  LucideProps,
+  // Nuevos iconos importados o alternativas
+  CreditCard, // Alternativa para Suscripción
+  Repeat, // Alternativa para Suscripción
+  Truck, // Propuesta para Proveedores
+  ArrowLeftRight, // Propuesta para Movimientos de Stock
+  Package2, // Otra propuesta para Movimientos de Stock
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
+import { ForwardRefExoticComponent, RefAttributes } from 'react';
 
 interface SidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
 }
 
+interface NavItem {
+  path: string;
+  label: string;
+  icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+  permission?: string;
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
 
-  const getRoleInSpanish = (role: string) => {
-    switch (role) {
-      case 'CLIENTE': return 'Cliente';
-      case 'SUPERUSER': return 'Super Usuario';
-      case 'ADMINISTRATIVO': return 'Administrativo';
-      case 'EMPLEADO': return 'Empleado';
-      default: return role;
+  const userRoleName = user?.role?.name;
+
+  const getRoleInSpanish = (roleName: string | undefined) => {
+    switch (roleName) {
+      case 'Cliente': return 'Cliente';
+      case 'Super Usuario': return 'Super Usuario';
+      case 'Administrador': return 'Administrador';
+      case 'Empleado': return 'Empleado';
+      default: return roleName || 'Desconocido';
     }
   };
 
-  // Definir ítems de navegación comunes para todos los usuarios autenticados
-  const commonNavItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: Grid2X2 },
-    { path: '/perfil', label: 'Mi Perfil', icon: User },
-    { path: '/personalizacion', label: 'Personalización', icon: Palette },
+  const navSections = [
+    {
+      title: 'Area Personal',
+      items: [
+        { path: '/dashboard', label: 'Dashboard', icon: Grid2X2 },
+        { path: '/perfil', label: 'Mi Perfil', icon: User },
+        { path: '/personalizacion', label: 'Personalización', icon: Palette },
+      ]
+    },
+    {
+      title: 'Módulo de Ventas',
+      items: [
+        { path: '/empresas', label: 'Gestionar Empresas', icon: Briefcase, permission: 'view_empresa' },
+        { path: '/suscripciones', label: 'Gestionar Suscripción', icon: Repeat, permission: 'view_suscripcion' }, // <-- CAMBIADO: Repeat
+        
+        
+        { path: '/ventas', label: 'Ventas', icon: ReceiptText, permission: 'view_venta' },
+      ]
+    },
+    {
+      title: 'Módulo de Inventario',
+      items: [
+        { path: '/sucursales', label: 'Sucursales', icon: MapPin, permission: 'view_sucursal' },
+        { path: '/almacenes', label: 'Almacenes', icon: Warehouse, permission: 'view_almacen' },
+        { path: '/categorias', label: 'Categorías', icon: Tag, permission: 'view_categoria' },
+        { path: '/productos', label: 'Productos', icon: Package, permission: 'view_producto' },
+        { path: '/proveedores', label: 'Proveedores', icon: Truck, permission: 'view_proveedor' },
+        { path: '/movimientos', label: 'Movimientos de Stock', icon: ArrowLeftRight, permission: 'view_movimiento' }, 
+      ]
+    },
+    {
+      title: 'Módulo de Control de Acceso',
+      items: [
+        { path: '/admin/usuarios', label: 'Gestionar Usuarios', icon: Users, permission: 'manage_users' },
+        { path: '/admin/roles', label: 'Gestionar Roles', icon: KeyRound, permission: 'manage_roles' },
+        { path: '/admin/permissions', label: 'Gestionar Permisos', icon: ShieldCheck, permission: 'manage_permissions' },
+      ]
+    }
   ];
-
-  const clienteNavItems = [
-    ...commonNavItems,
-  ];
-
-  const empleadoNavItems = [
-    ...commonNavItems,
-    { path: '/almacenes', label: 'Almacenes', icon: Warehouse },
-    { path: '/categorias', label: 'Categorías', icon: Tag },
-    { path: '/productos', label: 'Productos', icon: Package },
-    { path: '/ventas', label: 'Ventas', icon: ReceiptText }, // <--- NUEVO ÍTEM DE MENÚ PARA VENTAS
-  ];
-
-  const administrativoNavItems = [
-    ...commonNavItems,
-    { path: '/gestionar-usuarios', label: 'Gestionar Usuarios', icon: Users },
-    { path: '/sucursales', label: 'Sucursales', icon: MapPin },
-    { path: '/almacenes', label: 'Almacenes', icon: Warehouse },
-    { path: '/categorias', label: 'Categorías', icon: Tag },
-    { path: '/productos', label: 'Productos', icon: Package },
-    { path: '/ventas', label: 'Ventas', icon: ReceiptText }, // <--- NUEVO ÍTEM DE MENÚ PARA VENTAS
-  ];
-
-  const superUserNavItems = [
-    ...commonNavItems,
-    { path: '/empresas', label: 'Gestión de Empresas', icon: Briefcase },
-    { path: '/suscripciones', label: 'Planes Suscripción', icon: Server },
-    { path: '/gestionar-usuarios', label: 'Gestionar Usuarios', icon: Users },
-    { path: '/sucursales', label: 'Sucursales', icon: MapPin },
-    { path: '/almacenes', label: 'Almacenes', icon: Warehouse },
-    { path: '/categorias', label: 'Categorías', icon: Tag },
-    { path: '/productos', label: 'Productos', icon: Package },
-    { path: '/ventas', label: 'Ventas', icon: ReceiptText }, // <--- NUEVO ÍTEM DE MENÚ PARA VENTAS
-  ].filter((item, index, self) => 
-    index === self.findIndex((t) => t.path === item.path)
-  );
-
-
-  let navItems = [];
-  if (user?.role === 'SUPERUSER') {
-    navItems = superUserNavItems;
-  } else if (user?.role === 'ADMINISTRATIVO') {
-    navItems = administrativoNavItems;
-  } else if (user?.role === 'EMPLEADO') {
-    navItems = empleadoNavItems;
-  } else {
-    navItems = clienteNavItems;
-  }
 
   return (
     <div className={cn(
@@ -145,37 +139,61 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                 {user.first_name} {user.last_name}
               </p>
               <p className="text-gray-400 text-xs truncate">
-                {getRoleInSpanish(user.role)}
+                {getRoleInSpanish(userRoleName)}
               </p>
+              {user.empresa_detail && (
+                  <p className="text-gray-400 text-xs truncate">
+                      Empresa: {user.empresa_detail.nombre}
+                  </p>
+              )}
             </div>
           </div>
         </div>
       )}
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname.startsWith(item.path) && item.path !== '/'; // Usar startsWith para rutas anidadas como /ventas/:id
-          
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200",
-                isActive 
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "text-gray-300 hover:bg-gray-700 hover:text-white",
-                isCollapsed && "justify-center"
-              )}
-            >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              {!isCollapsed && (
-                <span className="font-medium text-sm">{item.label}</span>
-              )}
-            </NavLink>
-          );
-        })}
+        {navSections.map((section, sectionIndex) => (
+          <React.Fragment key={sectionIndex}>
+            {section.title && !isCollapsed && (
+              <div className="pt-4 pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                {section.title}
+              </div>
+            )}
+            {section.items.map((item) => {
+              const canSeeItem = item.permission ? (user ? hasPermission(item.permission) : false) : true;
+
+              if (!canSeeItem) {
+                return null;
+              }
+
+              const Icon = item.icon;
+              const isActive = location.pathname.startsWith(item.path) &&
+                               (location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/')));
+
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200",
+                    isActive
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "text-gray-300 hover:bg-gray-700 hover:text-white",
+                    isCollapsed && "justify-center"
+                  )}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  {!isCollapsed && (
+                    <span className="font-medium text-sm">{item.label}</span>
+                  )}
+                </NavLink>
+              );
+            })}
+            {sectionIndex < navSections.length - 1 && !isCollapsed && (
+              <hr className="border-t border-gray-700 my-2" />
+            )}
+          </React.Fragment>
+        ))}
       </nav>
 
       <div className="p-4 border-t border-gray-700">

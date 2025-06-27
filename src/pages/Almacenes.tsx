@@ -2,8 +2,9 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api';
-import { Almacen } from '@/types/almacenes'; // Asegúrate de que Almacen aquí refleje el tipado de tu API
+import { Almacen } from '@/types/almacenes';
 import { Sucursal } from '@/types/sucursales';
+import { Empresa } from '@/types/empresas'; // Asegúrate de tener este tipo definido
 import { PaginatedResponse, FilterParams } from '@/types/auth';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -24,6 +25,7 @@ const initialFormData = {
   ubicacion: '',
   capacidad: null,
   sucursal: undefined,
+  empresa: undefined, // Agregamos el campo empresa aquí
 };
 
 // Función de debounce
@@ -46,17 +48,17 @@ const Almacenes = () => {
   const [formErrors, setFormErrors] = useState<any>({});
   
   // Estados para el filtro de la tabla de almacenes
-  const [searchInputValue, setSearchInputValue] = useState(''); // Valor para el input visible
-  const [searchTerm, setSearchTerm] = useState(''); // Valor real usado en la query (debounced)
-  const [selectedSucursalFilter, setSelectedSucursalFilter] = useState('ALL'); // "ALL" como valor inicial
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSucursalFilter, setSelectedSucursalFilter] = useState('ALL');
 
-  const canManageAlmacenes = currentUser?.is_superuser || currentUser?.role === 'ADMINISTRATIVO';
+const canManageAlmacenes = currentUser?.is_superuser || currentUser?.role?.name === 'Administrador';
 
   // Función debounced para actualizar el término de búsqueda de almacenes
   const debouncedSetSearchTerm = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 500), // Retraso de 500ms
+    }, 500),
     []
   );
 
@@ -67,6 +69,7 @@ const Almacenes = () => {
       const [_key, currentSearchTerm, currentSucursalFilter, empresaId, isSuperuser] = queryKey;
       const filters: FilterParams & { empresa?: number; sucursal?: number } = { search: currentSearchTerm as string || '' };
 
+      // Si no es superusuario, siempre filtra por la empresa del usuario actual
       if (!isSuperuser && empresaId) {
         filters.empresa = empresaId as number;
       }
@@ -90,21 +93,46 @@ const Almacenes = () => {
 
   const almacenes = almacenesData?.results || [];
 
-  // Obtener la lista de sucursales para el filtro
+  // Obtener la lista de sucursales para el filtro y el formulario
   const { data: sucursalesData, isLoading: isLoadingSucursalesFilter } = useQuery<PaginatedResponse<Sucursal>, Error>({
-    queryKey: ['sucursalesForAlmacenFilter', currentUser?.empresa, currentUser?.is_superuser],
+    queryKey: ['sucursalesForAlmacenForm', formData.empresa, currentUser?.is_superuser, currentUser?.empresa], // Depende de la empresa seleccionada o del usuario
     queryFn: ({ queryKey }) => {
-      const [_key, empresaId, isSuperuser] = queryKey;
+      const [_key, selectedEmpresaId, isSuperuser, userEmpresaId] = queryKey;
       const filters: FilterParams & { empresa?: number } = {};
-      if (!isSuperuser && empresaId) {
-        filters.empresa = empresaId as number;
+      
+      // Si es superusuario y ha seleccionado una empresa en el formulario, usa esa empresa
+      if (isSuperuser && selectedEmpresaId) {
+        filters.empresa = selectedEmpresaId as number;
+      } 
+      // Si no es superusuario, o si es superusuario pero no ha seleccionado una empresa (ej. al inicio),
+      // usa la empresa del usuario actual (si existe).
+      else if (!isSuperuser && userEmpresaId) {
+        filters.empresa = userEmpresaId as number;
+      } else if (isSuperuser && !selectedEmpresaId && userEmpresaId) {
+        // Fallback para superusuario si aún no selecciona empresa, pero tiene una default
+        filters.empresa = userEmpresaId as number;
       }
+      
+      // Si no hay empresa definida (ej. superusuario que aún no selecciona), no se cargarán sucursales.
+      if (!filters.empresa && !isSuperuser) {
+        // Esto previene cargar todas las sucursales si un no-superuser no tiene empresa asignada
+        return Promise.resolve({ results: [], count: 0, next: null, previous: null });
+      }
+
+      console.log("DEBUG: Fetching sucursales with filters for form:", filters);
       return api.fetchSucursales(filters);
     },
     enabled: canManageAlmacenes,
   });
   const sucursales = sucursalesData?.results || [];
 
+  // NUEVO: Obtener la lista de empresas (solo para Superuser en el formulario)
+  const { data: empresasData, isLoading: isLoadingEmpresas } = useQuery<PaginatedResponse<Empresa>, Error>({
+    queryKey: ['empresasForAlmacenForm'],
+    queryFn: () => api.fetchEmpresas(),
+    enabled: !!currentUser?.is_superuser, // Solo si es superusuario
+  });
+  const empresas = empresasData?.results || [];
 
   const createAlmacenMutation = useMutation<Almacen, Error, Omit<Almacen, 'id' | 'sucursal_detail' | 'empresa_detail'>>({
     mutationFn: (newAlmacenData) => api.createAlmacen(newAlmacenData),
@@ -171,15 +199,18 @@ const Almacenes = () => {
 
   const handleSelectChange = (name: string, value: string) => {
     let parsedValue: number | undefined;
-    if (value === "empty-selection-option" || value === "ALL") {
+    if (value === "empty-selection-option" || value === "ALL" || value === "") { // Añadir "" para manejar selecciones vacías
         parsedValue = undefined;
     } else {
-        parsedValue = parseInt(value, 10);
+      parsedValue = parseInt(value, 10);
     }
 
-    if (name === 'sucursalFilter') { // Para el filtro de la tabla
+    if (name === 'sucursalFilter') {
         setSelectedSucursalFilter(value);
-    } else { // Para el campo sucursal en el formulario de creación/edición
+    } else if (name === 'empresa') { // Handle empresa select change
+        setFormData(prev => ({ ...prev, [name]: parsedValue, sucursal: undefined })); // Reset sucursal when company changes
+        setFormErrors(prev => ({ ...prev, sucursal: undefined })); // Clear sucursal error
+    } else { // For sucursal in the form
         setFormData(prev => ({ ...prev, [name]: parsedValue }));
     }
 
@@ -200,10 +231,17 @@ const Almacenes = () => {
         ubicacion: almacen.ubicacion || '',
         capacidad: almacen.capacidad ?? null,
         sucursal: almacen.sucursal || undefined,
+        empresa: almacen.empresa || undefined, // Asignar la empresa al editar
       });
     } else {
       setEditingAlmacen(null);
-      setFormData(initialFormData);
+      // Para un nuevo almacén:
+      // Si es superusuario, no pre-seleccionar empresa.
+      // Si no es superusuario, pre-seleccionar la empresa del usuario.
+      setFormData({
+        ...initialFormData,
+        empresa: currentUser?.is_superuser ? undefined : (currentUser?.empresa || undefined),
+      });
     }
     setIsFormOpen(true);
   };
@@ -222,6 +260,10 @@ const Almacenes = () => {
     const errors: Record<string, string> = {};
     if (!formData.nombre) errors.nombre = "El nombre es requerido.";
     if (!formData.sucursal) errors.sucursal = "La sucursal es requerida.";
+    // NUEVO: Validar empresa para superusuario
+    if (currentUser?.is_superuser && !formData.empresa) {
+      errors.empresa = "La empresa es requerida para superusuarios.";
+    }
 
     if (formData.capacidad !== null && formData.capacidad !== undefined) {
         const numCapacidad = Number(formData.capacidad);
@@ -232,31 +274,50 @@ const Almacenes = () => {
         }
     }
 
-
     if (Object.keys(errors).length > 0) {
         setFormErrors(errors);
         toast({ variant: "destructive", title: "Error de validación", description: "Por favor, corrige los errores en el formulario." });
         return;
     }
 
-    // Aserción de tipo para dataToSubmit después de las validaciones
-    // Aquí le decimos a TypeScript que estamos seguros de que nombre y sucursal están presentes
-    // Esto es seguro porque hemos validado que no son undefined/null justo arriba.
-    const dataToSubmit: {
-        nombre: string;
-        ubicacion: string | null;
-        capacidad: number | null;
-        sucursal: number;
-        empresa: number;
-    } = {
-      nombre: formData.nombre!, // Usamos '!' para afirmar que no es null/undefined
-      ubicacion: formData.ubicacion || null,
-      capacidad: (formData.capacidad === null || formData.capacidad === undefined || isNaN(Number(formData.capacidad)))
-                 ? null
-                 : Number(formData.capacidad),
-      sucursal: formData.sucursal!, // Usamos '!' para afirmar que no es null/undefined
-      empresa: currentUser?.empresa as number,
-    };
+    // Preparar dataToSubmit
+    let dataToSubmit: Omit<Almacen, 'id' | 'sucursal_detail' | 'empresa_detail'>;
+
+    if (currentUser?.is_superuser) {
+      // Si es superusuario, los datos deben incluir la empresa seleccionada en el formulario
+      dataToSubmit = {
+        nombre: formData.nombre!,
+        ubicacion: formData.ubicacion || null,
+        capacidad: (formData.capacidad === null || formData.capacidad === undefined || isNaN(Number(formData.capacidad)))
+                    ? null
+                    : Number(formData.capacidad),
+        sucursal: formData.sucursal!,
+        empresa: formData.empresa!, // Superusuario debe enviar la empresa
+      };
+    } else {
+      // Si NO es superusuario, la empresa se obtiene del currentUser y no se envía si el backend la asigna
+      // Asumiendo que `currentUser?.empresa` siempre existe para estos roles y el backend lo usa.
+      // Si tu backend lo *requiere* incluso para no-superusuarios, pero luego lo *sobreescribe*,
+      // entonces aún podrías enviarlo aquí. Pero si el backend lo inyecta automáticamente sin requerirlo
+      // de la entrada, podrías omitirlo aquí.
+      // Para mayor seguridad y evitar errores de validación, vamos a enviarlo siempre,
+      // el backend ya tiene la lógica de sobreescribirlo/validarlo.
+      if (!currentUser?.empresa) {
+        toast({ variant: "destructive", title: "Error de usuario", description: "Tu cuenta no tiene una empresa asociada." });
+        return;
+      }
+      dataToSubmit = {
+        nombre: formData.nombre!,
+        ubicacion: formData.ubicacion || null,
+        capacidad: (formData.capacidad === null || formData.capacidad === undefined || isNaN(Number(formData.capacidad)))
+                    ? null
+                    : Number(formData.capacidad),
+        sucursal: formData.sucursal!,
+        empresa: currentUser.empresa as number, // La empresa del usuario actual
+      };
+    }
+
+    console.log("DEBUG: Data to submit:", dataToSubmit);
 
     if (editingAlmacen) {
       if (editingAlmacen.id) {
@@ -265,7 +326,7 @@ const Almacenes = () => {
         toast({ variant: "destructive", title: "Error", description: "ID de almacén para actualizar no encontrado." });
       }
     } else {
-      createAlmacenMutation.mutate(dataToSubmit as Omit<Almacen, 'id' | 'sucursal_detail' | 'empresa_detail'>);
+      createAlmacenMutation.mutate(dataToSubmit);
     }
   };
 
@@ -419,6 +480,35 @@ const Almacenes = () => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+            {/* Campo de selección de Empresa (solo para Superusuario) */}
+            {currentUser?.is_superuser && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="empresa" className="text-right text-gray-700">Empresa</Label>
+                <Select
+                  value={formData.empresa?.toString() || 'empty-selection-option'}
+                  onValueChange={(value) => handleSelectChange('empresa', value)}
+                  disabled={isLoadingEmpresas}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Selecciona una empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isLoadingEmpresas ? (
+                      <SelectItem value="loading-empresas" disabled>Cargando empresas...</SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem value="empty-selection-option">-- Selecciona --</SelectItem>
+                        {empresas.map(e => (
+                          <SelectItem key={e.id} value={e.id.toString()}>{e.nombre}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                {formErrors.empresa && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.empresa}</p>}
+              </div>
+            )}
+
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="nombre" className="text-right text-gray-700">Nombre</Label>
               <Input
@@ -456,12 +546,14 @@ const Almacenes = () => {
             </div>
             
             {/* Selector de Sucursal para el formulario de Almacén */}
+            {/* Deshabilita el selector de sucursal si es superusuario y no ha seleccionado una empresa */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="sucursal" className="text-right text-gray-700">Sucursal</Label>
               <Select
                 value={formData.sucursal?.toString() || 'empty-selection-option'}
                 onValueChange={(value) => handleSelectChange('sucursal', value)}
-                disabled={isLoadingSucursalesFilter}
+                // Deshabilita si está cargando sucursales O si es superusuario y no ha elegido empresa
+                disabled={isLoadingSucursalesFilter || (currentUser?.is_superuser && !formData.empresa)}
               >
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Selecciona una sucursal" />

@@ -1,198 +1,213 @@
-// src/pages/Ventas.tsx
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Importa useMutation y useQueryClient
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PlusCircle, Search, Eye, Edit, Trash2, Loader2, AlertTriangle } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Venta } from '@/types/ventas';
+import { toast } from '@/components/ui/use-toast';
+import { Pencil, Trash2, PlusCircle, RotateCcw, Eye } from 'lucide-react'; // ¡Importa Eye!
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertTriangle } from 'lucide-react'; // Asegúrate que AlertTriangle esté correctamente importado
 import api from '@/services/api';
-import { toast } from '@/components/ui/use-toast'; // Importa toast
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'; // Importa componentes de AlertDialog
+import { Venta } from '@/types/ventas';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Ventas: React.FC = () => {
   const { user } = useAuth();
-  const isAdminOrSuperuser = user?.is_superuser || user?.role === 'ADMINISTRATIVO';
-  const queryClient = useQueryClient(); // Instancia de QueryClient
+  const queryClient = useQueryClient();
 
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // UseQuery para obtener la lista de ventas
-  const { data, isLoading, isError, error } = useQuery<any, Error, Venta[]>({
-    queryKey: ['ventas', user?.empresa_detail?.id, user?.is_superuser, searchTerm],
-    queryFn: async ({ queryKey }) => {
-      const [_key, empresaId, isSuperUser, search] = queryKey;
+  const { data: ventas, isLoading, isError, error } = useQuery<Venta[], Error>({
+    queryKey: ['ventas', user?.empresa_detail?.id, user?.is_superuser],
+    queryFn: async () => {
       const filters: any = {};
-      if (!isSuperUser && empresaId) {
-        filters.empresa = empresaId;
-      }
-      if (search) {
-        filters.search = search;
+      if (user && !user.is_superuser && user.empresa_detail?.id) {
+        filters.empresa = user.empresa_detail.id;
       }
       const response = await api.fetchVentas(filters);
       return response.results;
     },
     enabled: !!user,
-    staleTime: 5 * 1000,
   });
 
-  // === Nueva mutación para eliminar ventas ===
-  const deleteVentaMutation = useMutation({
-    mutationFn: (ventaId: number) => api.deleteVenta(ventaId),
-    onSuccess: () => {
+  const cancelVentaMutation = useMutation<Venta, Error, number>({
+    mutationFn: (ventaId) => api.cancelarVenta(ventaId),
+    onSuccess: (updatedVenta) => {
+      queryClient.invalidateQueries({ queryKey: ['ventas'] });
       toast({
-        title: 'Venta Eliminada',
-        description: 'La venta ha sido eliminada correctamente.',
+        title: 'Venta Cancelada',
+        description: `La venta #${updatedVenta.id} ha sido cancelada y el stock ajustado.`,
       });
-      queryClient.invalidateQueries({ queryKey: ['ventas'] }); // Invalida la caché para refrescar la lista
-      // Opcional: invalidar también el dashboard si afecta a las métricas de ventas
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
     },
     onError: (err: any) => {
+      let errorMessage = 'Error al cancelar la venta.';
+      if (err.response && err.response.data && err.response.data.detail) {
+        errorMessage = `Error: ${err.response.data.detail}`;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
       toast({
-        title: 'Error al Eliminar',
-        description: `No se pudo eliminar la venta: ${err.response?.data?.detail || err.message}`,
+        title: 'Error al Cancelar Venta',
+        description: errorMessage,
         variant: 'destructive',
       });
     },
   });
 
+  const deleteVentaMutation = useMutation<any, Error, number>({
+    mutationFn: (ventaId) => api.deleteVenta(ventaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ventas'] });
+      toast({
+        title: 'Venta Eliminada',
+        description: 'La venta ha sido eliminada y el stock ajustado.',
+      });
+    },
+    onError: (err: any) => {
+      let errorMessage = 'Error al eliminar la venta.';
+      if (err.response && err.response.data && err.response.data.detail) {
+        errorMessage = `Error: ${err.response.data.detail}`;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      toast({
+        title: 'Error al Eliminar Venta',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    },
+  });
 
-  // Manejar estado de carga
+  const handleCancelClick = (ventaId: number) => {
+    if (window.confirm(`¿Estás seguro de que quieres CANCELAR la venta #${ventaId}? Esto ajustará el stock.`)) {
+      cancelVentaMutation.mutate(ventaId);
+    }
+  };
+
+  const handleDeleteClick = (ventaId: number) => {
+    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR la venta #${ventaId} permanentemente? Esto también ajustará el stock.`)) {
+      deleteVentaMutation.mutate(ventaId);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64 bg-background text-foreground">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2">Cargando ventas...</p>
+      <div className="p-4 md:p-6 space-y-4">
+        <Skeleton className="h-10 w-1/4" />
+        <Skeleton className="h-12 w-full" />
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  // Manejar estado de error
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-background text-destructive">
         <AlertTriangle className="h-12 w-12 mb-2" />
         <h3 className="text-lg font-medium text-destructive-foreground">Error al cargar ventas</h3>
-        <p className="text-muted-foreground">No se pudieron obtener las ventas. Por favor, intenta de nuevo más tarde.</p>
-        <p className="text-sm text-muted-foreground mt-1">{error?.message}</p>
+        <p className="text-muted-foreground">No se pudieron obtener las ventas. Detalles: {error?.message}</p>
       </div>
     );
   }
 
-  const ventas = data || [];
-
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 bg-background text-foreground min-h-screen-minus-header">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-primary font-heading">Gestión de Ventas</h1>
-        {isAdminOrSuperuser && (
-          <Link to="/ventas/crear">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <PlusCircle className="mr-2 h-4 w-4" /> Nueva Venta
-            </Button>
-          </Link>
-        )}
+    <div className="flex flex-col gap-4 p-4 md:p-6 bg-background text-foreground">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-3xl font-bold text-primary font-heading">Listado de Ventas</h1>
+        <Link to="/ventas/crear">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <PlusCircle className="mr-2 h-4 w-4" /> Crear Nueva Venta
+          </Button>
+        </Link>
       </div>
 
       <Card className="bg-card text-card-foreground border-border shadow-lg">
         <CardHeader>
-          <CardTitle className="font-semibold">Listado de Ventas</CardTitle>
-          <CardDescription className="text-muted-foreground">Consulta y gestiona las ventas de tu empresa.</CardDescription>
+          <CardTitle className="font-semibold">Ventas Registradas</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2 mb-4">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar ventas por ID o cliente..."
-              className="flex-1 bg-input border-input"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {/* Formato sin espacios en blanco para evitar warning */}
-                <TableRow className="bg-muted hover:bg-muted/90"><TableHead className="text-muted-foreground">ID Venta</TableHead><TableHead className="text-muted-foreground">Fecha</TableHead><TableHead className="text-muted-foreground">Cliente</TableHead><TableHead className="text-muted-foreground text-right">Monto Total</TableHead><TableHead className="text-muted-foreground">Estado</TableHead><TableHead className="text-muted-foreground text-center">Acciones</TableHead></TableRow>
-              </TableHeader>
-              <TableBody>
-                {ventas.length > 0 ? (
-                  ventas.map((venta) => (
-                    // Formato sin espacios en blanco para evitar warning
-                    <TableRow key={venta.id} className="border-border hover:bg-background/50">
+          {ventas && ventas.length === 0 ? (
+            <p className="text-center text-muted-foreground">No hay ventas registradas aún.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px]">ID</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Monto Total</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ventas?.map((venta) => (
+                    <TableRow key={venta.id}>
                       <TableCell className="font-medium">{venta.id}</TableCell>
-                      <TableCell>{new Date(venta.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</TableCell>
-                      <TableCell>{venta.usuario_nombre || 'N/A'}</TableCell>
-                      <TableCell className="text-right">${Number(venta.monto_total).toFixed(2)}</TableCell>
+                      <TableCell>{new Date(venta.fecha).toLocaleString()}</TableCell>
+                      <TableCell>{venta.empresa_nombre}</TableCell>
+                      <TableCell>{venta.usuario_nombre}</TableCell>
+                      <TableCell>${Number(venta.monto_total).toFixed(2)}</TableCell>
                       <TableCell>
-                        {venta.estado === 'Completada' && <span className="bg-green-100 text-green-800 px-2.5 py-0.5 rounded-full text-xs font-medium">Completada</span>}
-                        {venta.estado === 'Pendiente' && <span className="bg-yellow-100 text-yellow-800 px-2.5 py-0.5 rounded-full text-xs font-medium">Pendiente</span>}
-                        {venta.estado === 'Cancelada' && <span className="bg-red-100 text-red-800 px-2.5 py-0.5 rounded-full text-xs font-medium">Cancelada</span>}
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold
+                          ${venta.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : ''}
+                          ${venta.estado === 'Completada' ? 'bg-green-100 text-green-800' : ''}
+                          ${venta.estado === 'Cancelada' ? 'bg-red-100 text-red-800' : ''}
+                        `}>
+                          {venta.estado}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center items-center gap-2">
-                          <Link to={`/ventas/${venta.id}`}>
-                            <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10" title="Ver Detalles">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          {isAdminOrSuperuser && (
-                            <>
-                              {/* === CAMBIO DE ESTILO DEL BOTÓN EDITAR === */}
-                              <Link to={`/ventas/editar/${venta.id}`}>
-                                <Button variant="secondary" size="icon" className="text-primary-foreground hover:bg-secondary/80" title="Editar Venta">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </Link>
-                              
-                              {/* === IMPLEMENTACIÓN DEL BOTÓN ELIMINAR CON ALERTDIALOG === */}
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" title="Eliminar Venta" disabled={deleteVentaMutation.isPending}>
-                                    {deleteVentaMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-card text-card-foreground p-6 rounded-lg shadow-lg">
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
-                                    <AlertDialogDescription className="text-muted-foreground">
-                                      Esta acción no se puede deshacer. Esto eliminará permanentemente la venta #{venta.id}
-                                      y removerá sus datos de nuestros servidores.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel className="border-border bg-background text-foreground hover:bg-muted">Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteVentaMutation.mutate(venta.id)}
-                                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                                      disabled={deleteVentaMutation.isPending}
-                                    >
-                                      {deleteVentaMutation.isPending ? 'Eliminando...' : 'Sí, eliminar venta'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </>
-                          )}
-                        </div>
+                      <TableCell className="text-right space-x-2 flex justify-end">
+                        {/* Botón para VER Detalles de Venta */}
+                        <Link to={`/ventas/${venta.id}`}> {/* Esta ruta apunta a VentaDetalle */}
+                          <Button variant="outline" size="icon" title="Ver Detalles">
+                            <Eye className="h-4 w-4 text-gray-600" /> {/* Ícono de ojo */}
+                          </Button>
+                        </Link>
+                        
+                        {/* Botón de Cancelar Pedido (solo si no está cancelada) */}
+                        {venta.estado !== 'Cancelada' && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleCancelClick(venta.id)}
+                            title="Cancelar Venta"
+                            disabled={cancelVentaMutation.isPending || deleteVentaMutation.isPending}
+                            className="border-orange-400 text-orange-500 hover:bg-orange-50 hover:text-orange-600"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        )}
+                        
+                        {/* Botón para EDITAR Venta */}
+                        <Link to={`/ventas/editar/${venta.id}`}>
+                          <Button variant="outline" size="icon" title="Editar Venta">
+                            <Pencil className="h-4 w-4 text-blue-500" />
+                          </Button>
+                        </Link>
+                        
+                        {/* Botón de Eliminar Venta */}
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => handleDeleteClick(venta.id)}
+                          title="Eliminar Venta"
+                          disabled={cancelVentaMutation.isPending || deleteVentaMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
-                      No hay ventas registradas.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

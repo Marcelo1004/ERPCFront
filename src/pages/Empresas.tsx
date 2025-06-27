@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext'; // Usando alias de ruta
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/services/api'; // Usando alias de ruta
-import { Empresa, User, PaginatedResponse, FilterParams } from '@/types/auth'; // Importamos Empresa, User y PaginatedResponse desde auth.ts
+import {User, PaginatedResponse, FilterParams } from '@/types/auth'; // Importamos Empresa, User y PaginatedResponse desde auth.ts
 import { Suscripcion } from '@/types/suscripciones'; // Importamos Suscripcion desde su propio archivo
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/use-toast"; // Usando alias de ruta
 import { Loader2, PlusCircle, Edit, Trash2, Search, Building, User as UserIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // <<-- CORREGIDO: Usando 'from' en lugar de '=>'
 import { Checkbox } from '@/components/ui/checkbox'; // Usando alias de ruta
+import { Empresa } from '@/types/empresas';
 
 const Empresas: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -137,7 +138,11 @@ const Empresas: React.FC = () => {
 
   // Manejar el cambio de select para suscripción y admin_empresa
   const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value === '' ? null : parseInt(value) }));
+     if (value === 'null_value') { 
+      setFormData(prev => ({ ...prev, [name]: null }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: parseInt(value) }));
+    }
   };
 
   // Abrir diálogo de edición/creación
@@ -443,7 +448,7 @@ const Empresas: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {isLoadingSuscripciones ? (
-                    <SelectItem value="" disabled>Cargando planes...</SelectItem>
+                     <SelectItem value="loading_suscripciones" disabled>Cargando planes...</SelectItem>
                   ) : (
                     suscripciones?.map(s => (
                       <SelectItem key={s.id} value={s.id.toString()}>{s.nombre}</SelectItem>
@@ -467,10 +472,11 @@ const Empresas: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {isLoadingUsersForAdmin ? (
-                    <SelectItem value="" disabled>Cargando usuarios...</SelectItem>
+                    <SelectItem value="loading_users" disabled>Cargando usuarios...</SelectItem> 
                   ) : (
                     <>
-                      <SelectItem value="">-- Sin asignar --</SelectItem> {/* Opción para desasignar */}
+                      <SelectItem value="null_value">-- Sin asignar --</SelectItem> 
+                      
                       {usersForAdmin?.map(u => (
                         <SelectItem key={u.id} value={u.id.toString()}>{u.first_name} {u.last_name} ({u.username})</SelectItem>
                       ))}

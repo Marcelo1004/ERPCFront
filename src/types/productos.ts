@@ -9,6 +9,7 @@ export interface Producto {
   precio: string; // DecimalField en Django se mapea comúnmente a string en TS
   stock: number;
   imagen?: string | File | null; // Puede ser una URL de imagen (string) o un objeto File para subida
+  descuento: string;
 
   categoria?: number | null; // ID de la categoría
   categoria_detail?: { // Detalles de la categoría para lectura

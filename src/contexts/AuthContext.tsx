@@ -1,15 +1,24 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react';
-import { AuthState, User, LoginCredentials, AuthResponse, UserRegistrationData } from '../types/auth'; // Usando ruta relativa
-import api from '../services/api'; // Usando ruta relativa
-import { toast } from '../components/ui/use-toast'; // Usando ruta relativa
+// src/contexts/AuthContext.tsx
 
-// Define la interfaz para el contexto de autenticación
-interface AuthContextType extends AuthState {
-    login: (credentials: LoginCredentials) => Promise<boolean>;
-    logout: () => void;
-    register: (userData: UserRegistrationData) => Promise<User>; // Añadido el método register
-    // Cambiado de 'updateUser' a 'setUser' y ajustado el tipo de parámetro
-    setUser: (user: User | null) => void; 
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react';
+// Asegúrate de que User, LoginCredentials, AuthResponse, UserRegistrationData estén correctos en auth.ts
+import { AuthState, User, LoginCredentials, AuthResponse, UserCreationData } from '../types/auth'; 
+import api from '../services/api'; 
+import { toast } from '../components/ui/use-toast'; 
+import { Permission, Role } from '../types/rbac'; // Asegúrate de importar Role y Permission
+
+interface AuthContextType {
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean; // Indica si se está cargando el estado inicial de autenticación
+  login: (credentials: LoginCredentials) => Promise<void>; // Cambiado a Promise<void> para consistencia
+  logout: () => void;
+  register: (userData: UserCreationData) => Promise<User>; // Cambiado a UserCreationData
+  // Función para actualizar el objeto user en el estado del contexto (útil para perfil)
+  setUser: (user: User | null) => void; 
+  hasPermission: (permissionName: string) => boolean; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,13 +29,12 @@ type AuthAction =
     | { type: 'LOGIN_SUCCESS'; payload: { user: User; accessToken: string; refreshToken: string } } 
     | { type: 'LOGIN_FAILURE'; payload: string }
     | { type: 'LOGOUT' }
-    // Cambiado de 'UPDATE_USER' a 'SET_USER' y ajustado el tipo de payload
-    | { type: 'SET_USER'; payload: User | null } 
+    | { type: 'SET_USER'; payload: User | null } // Para actualizar el objeto user directamente
     | { type: 'RESTORE_SESSION'; payload: { user: User; accessToken: string; refreshToken: string } } 
     | { type: 'REGISTER_START' } 
     | { type: 'REGISTER_SUCCESS' } 
-    | { type: 'REGISTER_FAILURE'; payload: string }; 
-
+    | { type: 'REGISTER_FAILURE'; payload: string }
+    | { type: 'SET_LOADING'; payload: boolean }; // Nueva acción para controlar isLoading
 
 // Estado inicial del reducer
 const initialState: AuthState = {
@@ -34,7 +42,7 @@ const initialState: AuthState = {
     accessToken: null, 
     refreshToken: null, 
     isAuthenticated: false,
-    isLoading: false,
+    isLoading: true, // Inicialmente true para indicar que estamos cargando la sesión
     error: null,
 };
 
@@ -66,10 +74,17 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
                 error: action.payload,
             };
         case 'LOGOUT':
-            return initialState;
-        // Manejador para la acción SET_USER (reemplaza completamente el objeto user)
+            // Asegúrate de resetear isLoading a false en logout también.
+            return { ...initialState, isLoading: false }; 
         case 'SET_USER': 
-            return { ...state, user: action.payload };
+            // Cuando actualizamos el usuario directamente (ej. desde el perfil)
+            // Asegúrate de que isAuthenticated refleje si user es null o no.
+            return { 
+                ...state, 
+                user: action.payload, 
+                isAuthenticated: !!action.payload,
+                isLoading: false, // La actualización directa significa que no estamos "cargando" la autenticación
+            };
         case 'RESTORE_SESSION':
             return {
                 ...state,
@@ -77,10 +92,12 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
                 accessToken: action.payload.accessToken,
                 refreshToken: action.payload.refreshToken,
                 isAuthenticated: true,
-                isLoading: false, 
+                isLoading: false, // Sesión restaurada, la carga ha terminado
             };
         case 'REGISTER_SUCCESS': 
             return { ...state, isLoading: false, error: null };
+        case 'SET_LOADING': // Maneja el estado de carga
+            return { ...state, isLoading: action.payload };
         default:
             return state;
     }
@@ -90,28 +107,59 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [state, dispatch] = useReducer(authReducer, initialState);
 
-    // Efecto para restaurar la sesión desde localStorage al cargar la aplicación
+    // Función para obtener el perfil del usuario actual desde la API
+    const fetchAndSetUser = useCallback(async (token: string) => {
+        dispatch({ type: 'SET_LOADING', payload: true }); // Indicar que estamos cargando
+        try {
+            const userProfile = await api.fetchUserProfile();
+            dispatch({ type: 'SET_USER', payload: userProfile });
+            // Asegúrate de que el user en localStorage también esté actualizado con los datos del perfil
+            localStorage.setItem('user', JSON.stringify(userProfile));
+        } catch (error) {
+            console.error('Failed to fetch user profile on session restore:', error);
+            // Si el token es inválido o el perfil no se carga, forzar logout
+            dispatch({ type: 'LOGOUT' }); 
+            toast({
+                title: 'Sesión Expirada',
+                description: 'Tu sesión ha expirado o es inválida. Por favor, inicia sesión de nuevo.',
+                variant: 'destructive',
+            });
+        } finally {
+            dispatch({ type: 'SET_LOADING', payload: false }); // La carga ha terminado
+        }
+    }, []);
+
+
+    // Efecto para restaurar la sesión o cargar el perfil al montar la aplicación
     useEffect(() => {
         const accessToken = localStorage.getItem('accessToken');
         const refreshToken = localStorage.getItem('refreshToken');
-        const userData = localStorage.getItem('user');
+        const storedUserData = localStorage.getItem('user');
 
-        if (accessToken && refreshToken && userData) {
+        if (accessToken && refreshToken && storedUserData) {
             try {
-                const user: User = JSON.parse(userData);
+                const user: User = JSON.parse(storedUserData);
+                // Restauramos la sesión inmediatamente con los datos de localStorage
+                // Pero luego, intentamos refrescar los datos del usuario desde el API
                 dispatch({ type: 'RESTORE_SESSION', payload: { user, accessToken, refreshToken } });
+                fetchAndSetUser(accessToken); // Intenta obtener el perfil más reciente
             } catch (error) {
                 console.error("Error al parsear datos de usuario de localStorage:", error);
+                // Si hay un error al parsear, limpiar y forzar logout
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 localStorage.removeItem('user');
                 dispatch({ type: 'LOGOUT' }); 
             }
+        } else {
+            // No hay tokens en localStorage, no hay sesión para restaurar.
+            dispatch({ type: 'SET_LOADING', payload: false }); // La carga inicial ha terminado
         }
-    }, []);
+    }, [fetchAndSetUser]); // Dependencia de useCallback
+
 
     // Función para iniciar sesión
-    const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
+    const login = useCallback(async (credentials: LoginCredentials): Promise<void> => {
         dispatch({ type: 'LOGIN_START' });
 
         try {
@@ -121,12 +169,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 throw new Error('La respuesta del servidor no contiene los tokens o la información del usuario.');
             }
 
+            // El backend ya debería enviar el objeto User con el role y permissions anidados
             const user: User = response.user;
 
-            // Guardar en localStorage
             localStorage.setItem('accessToken', response.access);
             localStorage.setItem('refreshToken', response.refresh);
-            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem('user', JSON.stringify(user)); // Guardar el objeto user completo
 
             dispatch({
                 type: 'LOGIN_SUCCESS',
@@ -137,11 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 title: "Inicio de sesión exitoso",
                 description: `Bienvenido/a ${user.first_name}`,
             });
-
-            return true;
         } catch (error: any) {
             let errorMessage = 'Error al iniciar sesión';
-
             if (error.code === 'ECONNABORTED') {
                 errorMessage = 'El servidor está tardando demasiado en responder. Por favor, inténtelo de nuevo más tarde.';
             } else if (error.response) {
@@ -167,16 +212,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 description: errorMessage,
                 variant: "destructive",
             });
-
-            return false;
+            throw error; 
         }
     }, []);
 
     // Función para registrar un nuevo usuario
-    const register = useCallback(async (userData: UserRegistrationData): Promise<User> => {
+    const register = useCallback(async (userData: UserCreationData): Promise<User> => {
         dispatch({ type: 'REGISTER_START' });
         try {
-            const newUser: User = await api.createUsuario(userData);
+            // Asumo que tu API para registrar ahora se llama `register`
+            const newUser: User = await api.register(userData); 
             dispatch({ type: 'REGISTER_SUCCESS' });
             toast({
                 title: "Registro exitoso",
@@ -187,7 +232,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             let errorMessage = 'Error al registrar usuario';
             if (error.response) {
                 if (error.response.data) {
-                    // Intenta parsear errores de validación de Django REST Framework
                     errorMessage = JSON.stringify(error.response.data); 
                     if (error.response.data.detail) {
                       errorMessage = error.response.data.detail;
@@ -219,18 +263,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = useCallback(() => {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
+        localStorage.removeItem('user'); // Asegúrate de limpiar también el user
         dispatch({ type: 'LOGOUT' });
-
         toast({
             title: "Sesión cerrada",
             description: "Has cerrado sesión correctamente",
         });
+        window.location.href = '/login'; // Redirigir siempre después del logout
     }, []);
 
-    // Función para actualizar los datos del usuario en el contexto (anteriormente 'updateUser')
-    const setUser = useCallback((user: User | null) => { // Acepta User o null para reemplazar completamente
-        // Asegúrate de que el user en localStorage también se actualice
+    // Función para actualizar el objeto user en el estado del contexto (anteriormente 'updateUser')
+    const setUser = useCallback((user: User | null) => { 
         if (user) {
             localStorage.setItem('user', JSON.stringify(user));
         } else {
@@ -239,13 +282,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'SET_USER', payload: user });
     }, []);
 
+   
+    const hasPermission = useCallback((permissionName: string): boolean => {
+  
+      const currentUser = state.user; 
+
+      if (!currentUser || !currentUser.role || !currentUser.role.permissions) {
+        return false; 
+      }
+      
+      if (currentUser.is_superuser) {
+        return true;
+      }
+      
+      return currentUser.role.permissions.some(
+        (p) => p.codename === permissionName || p.name === permissionName
+      );
+    }, [state.user]); 
+
     // Provee el estado y las funciones a los componentes hijos
     const authContextValue = {
         ...state,
         login,
         logout,
         register, 
-        setUser, // Ahora se llama setUser
+        setUser, 
+        hasPermission,
     };
 
     return (

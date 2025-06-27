@@ -1,24 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { useAuth } from '../contexts/AuthContext'; // Ruta relativa
+import { useAuth } from '../contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../services/api'; // Ruta relativa
-import { Suscripcion } from '../types/suscripciones'; // Ruta relativa
+import api from '../services/api';
+import { Suscripcion } from '../types/suscripciones';
 import { PaginatedResponse } from '../types/auth'; // Usamos la interfaz PaginatedResponse de auth.ts
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from "../components/ui/card"; // Ruta relativa
-import { Button } from "../components/ui/button"; // Ruta relativa
-import { Input } from "../components/ui/input"; // Ruta relativa
-import { Label } from "../components/ui/label"; // Ruta relativa
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table"; // Ruta relativa
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog"; // Ruta relativa
-import { toast } from "../components/ui/use-toast"; // Ruta relativa
+} from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { toast } from "../components/ui/use-toast";
 import { Loader2, PlusCircle, Edit, Trash2, Search } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'; // Ruta relativa
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 
 
 const Suscripciones: React.FC = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser } = useAuth();  
   const queryClient = useQueryClient();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -27,29 +27,32 @@ const Suscripciones: React.FC = () => {
     nombre: '',
     descripcion: '',
     cantidad_usuarios_permitidos: 1,
+    precio: 0, // ¡Añadido! Valor inicial del precio
   });
   const [formErrors, setFormErrors] = useState<any>({});
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Solo SuperUsuario puede crear/editar/eliminar suscripciones
   const canManageSuscripciones = currentUser?.is_superuser;
 
-  // Consulta para obtener la lista de suscripciones
   const { data: suscripcionesData, isLoading: isLoadingSuscripciones, error: suscripcionesError } = useQuery<PaginatedResponse<Suscripcion>, Error>({
     queryKey: ['suscripcionesList'],
-    queryFn: () => api.fetchSuscripciones() as Promise<PaginatedResponse<Suscripcion>>, // La API puede devolver PaginatedResponse o array
+    queryFn: () => api.fetchSuscripciones() as Promise<PaginatedResponse<Suscripcion>>,
   });
 
-  const suscripciones = suscripcionesData?.results || []; // Extraer resultados si es paginado, sino usar el array directamente
+  const suscripciones = suscripcionesData?.results || [];
 
-  // Mutación para crear suscripción
   const createSuscripcionMutation = useMutation({
     mutationFn: (newSuscripcionData: Omit<Suscripcion, 'id'>) => api.createSuscripcion(newSuscripcionData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suscripcionesList'] });
       toast({ title: "Suscripción creada", description: "El nuevo plan de suscripción ha sido registrado exitosamente." });
       setIsFormOpen(false);
-      setFormData({});
+      setFormData({ // Resetear formulario incluyendo precio
+        nombre: '',
+        descripcion: '',
+        cantidad_usuarios_permitidos: 1,
+        precio: 0,
+      });
       setFormErrors({});
     },
     onError: (err: any) => {
@@ -59,14 +62,18 @@ const Suscripciones: React.FC = () => {
     },
   });
 
-  // Mutación para actualizar suscripción
   const updateSuscripcionMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Suscripcion> }) => api.updateSuscripcion(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suscripcionesList'] });
       toast({ title: "Suscripción actualizada", description: "La información del plan de suscripción ha sido guardada exitosamente." });
       setIsFormOpen(false);
-      setFormData({});
+      setFormData({ // Resetear formulario incluyendo precio
+        nombre: '',
+        descripcion: '',
+        cantidad_usuarios_permitidos: 1,
+        precio: 0,
+      });
       setFormErrors({});
       setEditingSuscripcion(null);
     },
@@ -77,7 +84,6 @@ const Suscripciones: React.FC = () => {
     },
   });
 
-  // Mutación para eliminar suscripción
   const deleteSuscripcionMutation = useMutation({
     mutationFn: (id: number) => api.deleteSuscripcion(id),
     onSuccess: () => {
@@ -93,7 +99,10 @@ const Suscripciones: React.FC = () => {
   // Manejar el cambio de input del formulario
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: name === 'cantidad_usuarios_permitidos' ? parseInt(value) : value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: (name === 'cantidad_usuarios_permitidos' || name === 'precio') ? parseFloat(value) : value // ¡Parsea precio como float!
+    }));
   };
 
   // Abrir diálogo de edición/creación
@@ -106,6 +115,7 @@ const Suscripciones: React.FC = () => {
         nombre: suscripcion.nombre || '',
         descripcion: suscripcion.descripcion || '',
         cantidad_usuarios_permitidos: suscripcion.cantidad_usuarios_permitidos || 1,
+        precio: suscripcion.precio || 0, // ¡Carga el precio al editar!
       });
     } else {
       setEditingSuscripcion(null);
@@ -113,6 +123,7 @@ const Suscripciones: React.FC = () => {
         nombre: '',
         descripcion: '',
         cantidad_usuarios_permitidos: 1,
+        precio: 0, // ¡Inicializa precio para nuevas suscripciones!
       });
     }
     setIsFormOpen(true);
@@ -122,7 +133,12 @@ const Suscripciones: React.FC = () => {
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingSuscripcion(null);
-    setFormData({});
+    setFormData({ // Resetear formulario completamente
+      nombre: '',
+      descripcion: '',
+      cantidad_usuarios_permitidos: 1,
+      precio: 0,
+    });
     setFormErrors({});
   };
 
@@ -132,19 +148,24 @@ const Suscripciones: React.FC = () => {
     setFormErrors({});
 
     // Validaciones básicas del lado del cliente
-    if (!formData.nombre || formData.cantidad_usuarios_permitidos === undefined) {
-      setFormErrors({ general: "Nombre y cantidad de usuarios permitidos son requeridos." });
+    if (!formData.nombre || formData.cantidad_usuarios_permitidos === undefined || formData.precio === undefined) { // ¡Valida precio!
+      setFormErrors({ general: "Nombre, cantidad de usuarios permitidos y precio son requeridos." });
       toast({ variant: "destructive", title: "Error de validación", description: "Por favor, completa todos los campos requeridos." });
       return;
     }
+    if (formData.precio < 0) { // Validar que el precio no sea negativo
+      setFormErrors({ precio: "El precio no puede ser negativo." });
+      toast({ variant: "destructive", title: "Error de validación", description: "El precio no puede ser un valor negativo." });
+      return;
+    }
 
-    if (editingSuscripcion) { // Lógica para actualizar
+    if (editingSuscripcion) {
       if (editingSuscripcion.id) {
         updateSuscripcionMutation.mutate({ id: editingSuscripcion.id, data: formData as Suscripcion });
       } else {
         toast({ variant: "destructive", title: "Error", description: "ID de suscripción para actualizar no encontrado." });
       }
-    } else { // Lógica para crear
+    } else {
       createSuscripcionMutation.mutate(formData as Omit<Suscripcion, 'id'>);
     }
   };
@@ -155,6 +176,8 @@ const Suscripciones: React.FC = () => {
     return suscripciones.filter(suscripcion =>
       suscripcion.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       suscripcion.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
+      // Opcional: buscar por precio (si es relevante para el usuario final)
+      // || String(suscripcion.precio).includes(searchTerm)
     );
   }, [suscripciones, searchTerm]);
 
@@ -215,6 +238,7 @@ const Suscripciones: React.FC = () => {
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</TableHead>
                   <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuarios Permitidos</TableHead>
+                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</TableHead> {/* ¡Añadido! */}
                   {canManageSuscripciones && (
                     <TableHead className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</TableHead>
                   )}
@@ -223,7 +247,7 @@ const Suscripciones: React.FC = () => {
               <TableBody className="bg-white divide-y divide-gray-100">
                 {filteredSuscripciones.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={canManageSuscripciones ? 4 : 3} className="h-24 text-center text-gray-500">
+                    <TableCell colSpan={canManageSuscripciones ? 5 : 4} className="h-24 text-center text-gray-500"> {/* ¡Colspan ajustado! */}
                       No se encontraron planes de suscripción.
                     </TableCell>
                   </TableRow>
@@ -233,6 +257,7 @@ const Suscripciones: React.FC = () => {
                       <TableCell className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{suscripcion.nombre}</TableCell>
                       <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{suscripcion.descripcion || 'N/A'}</TableCell>
                       <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{suscripcion.cantidad_usuarios_permitidos}</TableCell>
+                      <TableCell className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${Number(suscripcion.precio).toFixed(2)}</TableCell> {/* ¡Muestra el precio! */}
                       {canManageSuscripciones && (
                         <TableCell className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <Button
@@ -311,6 +336,22 @@ const Suscripciones: React.FC = () => {
                 min="1"
               />
               {formErrors.cantidad_usuarios_permitidos && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.cantidad_usuarios_permitidos}</p>}
+            </div>
+            {/* ¡NUEVO CAMPO: PRECIO! */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="precio" className="text-right text-gray-700">Precio</Label>
+              <Input
+                id="precio"
+                name="precio"
+                type="number"
+                step="0.01" // Permite valores decimales
+                value={formData.precio !== undefined ? formData.precio : ''} // Manejar 0 y undefined
+                onChange={handleInputChange}
+                className="col-span-3 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
+                required
+                min="0" // El precio no debe ser negativo
+              />
+              {formErrors.precio && <p className="col-span-4 text-red-500 text-sm text-right">{formErrors.precio}</p>}
             </div>
 
             {formErrors.general && <p className="col-span-4 text-red-500 text-sm text-center">{formErrors.general}</p>}

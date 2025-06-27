@@ -23,14 +23,15 @@ import {
   LineChart as LineChartIcon,
   BarChart,
   Clock,
-  UserPlus // Importamos UserPlus para el tipo 'user_created' en Actividad Reciente
+  UserPlus, 
+  Truck, // ¡NUEVO! Icono para Proveedores
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
   LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid,
   BarChart as RechartsBarChart, Bar
 } from 'recharts';
-import { DashboardERPMetrics, FilterParams }  from '@/services/api'; // Asegúrate de que DashboardERPMetrics y FilterParams están exportadas aquí
+import { DashboardERPMetrics, FilterParams } from '@/services/api'; 
 import { toast } from '@/components/ui/use-toast';
 
 // Datos de ejemplo si no vienen de la API.
@@ -81,7 +82,7 @@ const Dashboard: React.FC = () => {
   const isSuperUser = user?.is_superuser;
 
   const { data: dashboardStats, isLoading, error } = useQuery<DashboardERPMetrics, Error>({
-    queryKey: ['erp-dashboard-stats', user?.id, user?.empresa, isSuperUser],
+    queryKey: ['erp-dashboard-stats', user?.id, user?.empresa_detail?.id, isSuperUser], // Usar empresa_detail.id
     queryFn: ({ queryKey }) => {
       const [_key, _userId, empresaId, isSuperUserQuery] = queryKey;
       const filters: FilterParams = {};
@@ -118,7 +119,31 @@ const Dashboard: React.FC = () => {
     '#eab308', // Yellow 500
   ]), []);
 
- 
+  // Función para formatear el nombre del rol
+  const getRoleDisplayName = (role: any): string => { // Tipo 'any' temporal para mayor compatibilidad
+    if (!role) return 'Desconocido';
+    
+    // Si role es un objeto con una propiedad 'name' (ej. { name: "Administrador" })
+    if (typeof role === 'object' && role !== null && 'name' in role && typeof role.name === 'string') {
+      const roleName = role.name;
+      if (roleName === 'Administrador') return 'ADMINISTRADOR';
+      if (roleName === 'Empleado') return 'EMPLEADO';
+      if (roleName === 'Super Usuario' || roleName === 'Superusuario') return 'SUPER USUARIO'; // Acepta ambas variaciones
+      return roleName.toUpperCase(); 
+    } 
+    // Si role es una cadena (ej. "SUPERUSER", "ADMINISTRATIVO", "EMPLEADO" o "Administrador")
+    if (typeof role === 'string') {
+      if (role.toUpperCase() === 'SUPERUSER') return 'SUPER USUARIO';
+      if (role.toUpperCase() === 'ADMINISTRATIVO') return 'ADMINISTRATIVO';
+      if (role.toUpperCase() === 'EMPLEADO') return 'EMPLEADO';
+      // Si el backend envía "Administrador" o "Super Usuario" directamente
+      if (role === 'Administrador') return 'ADMINISTRADOR';
+      if (role === 'Super Usuario') return 'SUPER USUARIO';
+      return role.toUpperCase(); // Fallback para otros roles directos
+    }
+    return 'Desconocido';
+  };
+
   const monthlySalesData = dashboardStats?.monthly_sales || demoMonthlySalesData;
   const topProductsData = dashboardStats?.top_products || demoTopProductsData;
   const categoryDistributionData = dashboardStats?.category_distribution || demoCategoryDistributionData;
@@ -158,13 +183,13 @@ const Dashboard: React.FC = () => {
           </h1>
           <p className="text-lg opacity-90">
             {isSuperUser
-              ? 'Panel de control centralizado del sistema ERP SaaS'
+              ? 'Panel de control centralizado del sistema ERP Cloud'
               : `Dashboard de gestión para ${user?.empresa_detail?.nombre || 'tu empresa'}`
             }
           </p>
           <div className="text-right mt-4 sm:mt-0">
             <Badge variant="secondary" className="bg-primary/20 text-primary-foreground border-primary/30 mb-2">
-              {user?.role === 'SUPERUSER' ? 'SUPER USUARIO' : user?.role === 'ADMINISTRATIVO' ? 'ADMINISTRATIVO' : 'EMPLEADO'}
+              {getRoleDisplayName(user?.role)} {/* Asumo que user.role es la propiedad que contiene la información del rol */}
             </Badge>
             <p className="opacity-80 text-sm">
               {new Date().toLocaleDateString('es-ES', {
@@ -225,7 +250,6 @@ const Dashboard: React.FC = () => {
             <p className="text-xs text-muted-foreground mt-1">Almacenes ({isSuperUser ? 'en el sistema' : 'en tu empresa'})</p>
           </CardContent>
         </Card>
-
         <Card className="bg-card text-card-foreground shadow-lg hover:shadow-xl transition-shadow duration-300 border border-border">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Categorías</CardTitle>
@@ -254,7 +278,6 @@ const Dashboard: React.FC = () => {
             <DollarSign className="h-5 w-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            {/* Convertir a Number antes de toFixed */}
             <div className="text-2xl font-bold text-foreground">${Number(dashboardStats.valor_total_inventario).toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">Valor estimado de todos los productos</p>
           </CardContent>
@@ -299,11 +322,9 @@ const Dashboard: React.FC = () => {
                     color: 'hsl(var(--foreground))'
                   }}
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  // Formatear el valor de las Ventas en el Tooltip
                   formatter={(value) => `$${Number(value).toFixed(2)}`}
                 />
                 <Legend />
-                {/* Recharts generalmente puede manejar strings numéricos, pero aseguramos */}
                 <Line type="monotone" dataKey="Ventas" stroke="hsl(var(--primary))" activeDot={{ r: 8 }} strokeWidth={2} />
               </RechartsLineChart>
             </ResponsiveContainer>
@@ -362,7 +383,11 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <RechartsBarChart data={categoryDistributionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <RechartsBarChart 
+                data={categoryDistributionData} 
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                barCategoryGap="15%" // Ajusta el espacio entre categorías para controlar el ancho de las barras
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
@@ -377,7 +402,13 @@ const Dashboard: React.FC = () => {
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
                 <Legend />
-                <Bar dataKey="products_count" name="Cantidad de Productos" fill="hsl(var(--secondary))" />
+                {/* === CAMBIO CLAVE AQUÍ: Usar colores del array para las barras === */}
+                {/* Esto creará una barra por cada entrada en categoryDistributionData, cada una con un color diferente */}
+                <Bar dataKey="products_count" name="Cantidad de Productos">
+                  {categoryDistributionData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
               </RechartsBarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -408,14 +439,12 @@ const Dashboard: React.FC = () => {
                         color: 'hsl(var(--foreground))'
                       }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
-                      // Formatear los valores en el Tooltip
                       formatter={(value, name) => [
                           name === 'total_value' ? `$${Number(value).toFixed(2)}` : value,
                           name === 'total_value' ? 'Valor Total' : 'Productos'
                       ]}
                     />
                     <Legend />
-                    {/* Aseguramos que dataKey 'total_value' y 'product_count' se lean correctamente, Recharts puede manejar strings numéricos */}
                     <Bar dataKey="total_value" name="Valor Total" fill="hsl(var(--primary))" />
                     <Bar dataKey="product_count" name="Cantidad Productos" fill="hsl(var(--secondary))" />
                   </RechartsBarChart>
@@ -433,7 +462,6 @@ const Dashboard: React.FC = () => {
                       {inventoryByWarehouseData.map((item, index) => (
                         <tr key={index} className="border-b border-border last:border-b-0 hover:bg-background/50">
                           <td className="py-2">{item.name}</td>
-                          {/* === CORRECCIÓN CLAVE AQUÍ: Convertir a Number === */}
                           <td className="py-2 text-right">${Number(item.total_value).toFixed(2)}</td> 
                           <td className="py-2 text-right">{item.product_count}</td>
                         </tr>
@@ -466,7 +494,6 @@ const Dashboard: React.FC = () => {
                   <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
                     {product.units} unidades
                   </Badge>
-                  {/* Convertir a Number antes de toFixed */}
                   <span className="text-sm text-muted-foreground ml-auto">${Number(product.sales).toFixed(2)}</span>
                 </li>
               ))}
@@ -513,13 +540,11 @@ const Dashboard: React.FC = () => {
               {recentActivitiesData.map((activity) => (
                 <li key={activity.id} className="flex items-start p-2 rounded-md hover:bg-background transition-colors duration-200">
                   <span className="flex-shrink-0 mr-3 text-muted-foreground">
-                    {/* Icono según el tipo de actividad */}
                     {activity.type === 'login' && <Users className="h-4 w-4" />}
                     {activity.type === 'product_update' && <Package className="h-4 w-4" />}
                     {activity.type === 'order_created' && <ShoppingCart className="h-4 w-4" />}
                     {activity.type === 'alert' && <AlertTriangle className="h-4 w-4 text-destructive" />}
-                    {activity.type === 'user_created' && <UserPlus className="h-4 w-4" />} {/* Usamos UserPlus */}
-                    {/* Puedes añadir más iconos aquí */}
+                    {activity.type === 'user_created' && <UserPlus className="h-4 w-4" />} 
                   </span>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground leading-snug">{activity.description}</p>

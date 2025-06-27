@@ -2,17 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { PanelLeft, Search } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Ya NO importamos SettingsPanel aquí, porque se renderiza en su propia ruta
-// import SettingsPanel from '@/components/SettingsPanel';
-
-// Asumo que tienes un componente Sidebar (ej. en '@/components/layout/Sidebar')
-import Sidebar from '@/components/layout/Sidebar'; // Ejemplo: tu componente de navegación lateral
+import Sidebar from '@/components/layout/Sidebar'; 
 
 const Layout = () => {
   const location = useLocation();
@@ -28,19 +22,32 @@ const Layout = () => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen w-full flex bg-background text-foreground font-body">
+    // Contenedor principal:
+    // - 'flex' para colocar el sidebar y el contenido en fila.
+    // - 'h-screen' para que ocupe el 100% de la altura de la ventana.
+    // - 'overflow-hidden' para que ninguna de sus secciones hijas cree un scroll general de la página.
+    <div className="flex h-screen overflow-hidden bg-background text-foreground font-body">
       {/* Sidebar fijo para desktop */}
-      <aside className={`hidden md:flex flex-col fixed inset-y-0 border-r border-border bg-sidebar-background text-sidebar-foreground transition-all duration-300
+      {/* - 'flex-shrink-0' previene que el sidebar se encoja.
+        - 'fixed inset-y-0' lo fija a los lados de la ventana.
+        - 'z-40' lo asegura por encima de otros elementos si hay superposiciones.
+      */}
+      <aside className={`hidden md:flex flex-col flex-shrink-0 fixed inset-y-0 border-r border-border bg-sidebar-background text-sidebar-foreground transition-all duration-300 z-40
         ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}
       >
         <Sidebar isCollapsed={isSidebarCollapsed} onToggle={handleToggleSidebar} />
       </aside>
 
-      {/* Contenido principal, con margen para el sidebar en desktop */}
-      <div className={`flex flex-col flex-1 transition-all duration-300
+      {/* Contenido principal, que abarca el resto de la pantalla */}
+      {/* - 'flex-1' para que ocupe todo el ancho restante después del sidebar.
+        - 'flex-col' para que el header y el main se apilen verticalmente.
+        - 'overflow-hidden' para contener sus propios hijos.
+        - Margen izquierdo dinámico para hacer espacio al sidebar.
+      */}
+      <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300
         ${isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}
       >
-        {/* Header para móviles y desktop */}
+        {/* Header: se mantiene pegajoso en la parte superior de esta sección de contenido */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
           {/* Botón para abrir el sidebar en móvil */}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
@@ -51,29 +58,25 @@ const Layout = () => {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="sm:max-w-xs p-0 bg-sidebar-background text-sidebar-foreground border-border">
-              {/* Sidebar dentro del Sheet para móvil */}
+              {/* Sidebar dentro del Sheet para móvil: siempre no colapsado para mostrar completo */}
               <Sidebar isCollapsed={false} onToggle={handleToggleSidebar} />
             </SheetContent>
           </Sheet>
 
-          {/* Barra de búsqueda (si tienes una) */}
-          <div className="relative ml-auto flex-1 md:grow-0">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Buscar..."
-              className="w-full rounded-lg bg-input pl-9 md:w-[200px] lg:w-[336px] border-input text-foreground"
-            />
+          {/* Espacio para otros elementos del header (ej. perfil de usuario, notificaciones) */}
+          <div className="ml-auto">
+            {/* Si tienes algo aquí, como un botón de usuario o notificaciones, iría aquí */}
           </div>
-
-          {/* Aquí puedes añadir otros elementos del header, como el botón de perfil o notificaciones */}
         </header>
 
-        {/* Contenido principal de la aplicación */}
-        <main className="flex flex-1 flex-col gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-          {/* El SettingsPanel YA NO se renderiza aquí directamente.
-              Ahora se accede a él a través de su ruta '/personalizacion'. */}
-          <Outlet /> {/* Outlet renderiza el contenido de la ruta anidada (ej. Dashboard, Productos, SettingsPanel, etc.) */}
+        {/* Contenido principal de la aplicación: ¡Esta es la clave para el scroll! */}
+        {/* - 'flex-1' para que ocupe TODO el espacio vertical restante después del header.
+          - 'overflow-y-auto' para gestionar su propio scroll vertical. 
+            ¡Si el contenido dentro del Outlet es más largo, solo esta área se desplazará!
+          - 'p-4 sm:px-6 md:gap-8': Mantén tu padding aquí.
+        */}
+        <main className="flex-1 overflow-y-auto p-4 sm:px-6 md:gap-8"> 
+          <Outlet />
         </main>
       </div>
     </div>
